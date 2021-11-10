@@ -1,5 +1,7 @@
 *.egg-info/
+submitit-logs/
 __pycache__/
+out/
 OLD*/
 data-debug/
 data/
