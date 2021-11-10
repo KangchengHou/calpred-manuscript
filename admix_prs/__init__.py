@@ -9,7 +9,7 @@ import admix
 import dapgen
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
-
+import warnings
 from ._utils import *
 
 
@@ -182,9 +182,10 @@ def calibrate_prs(
     if method in ["scale", "shift"]:
         assert q < 0.5, "q should be less than 0.5"
     elif method is None:
-        assert (
-            quantile_cov_cols == []
-        ), "When `method` is None, `quantile_cov_cols` should be empty"
+        if len(quantile_cov_cols) > 0:
+            warnings.warn(
+                "`quantile_cov_cols` will not be used because `method` is None"
+            )
     else:
         raise ValueError("method should be either scale or shift")
 
