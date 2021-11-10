@@ -111,7 +111,7 @@ def calc_prs(bfile, df_weights, n_sample=500):
 
 
 def calibrate_prs(
-    df, idx_cal, mean_cov_cols, q=0.1, method="scale", quantile_cov_cols=None
+    df, idx_cal, mean_cov_cols, q=0.1, method=None, quantile_cov_cols=None
 ):
     """
     Perform calibration:
@@ -161,7 +161,7 @@ def calibrate_prs(
     # df_cal.groupby("GROUP").apply(lambda x: np.quantile(x["CAL_SCALE"], 0.8))
     # df_cal.groupby("GROUP").apply(lambda x: np.quantile(x["FITTED_CAL_SCALE"], 0.8))
     """
-    assert method in ["scale", "shift"]
+    assert method in ["scale", "shift"] or method is None
     assert np.all([col in df.columns for col in ["PHENO", "PRS_MEAN"]])
     df = df.copy()
     if quantile_cov_cols is None:
@@ -171,19 +171,31 @@ def calibrate_prs(
         subset=["PHENO"] + mean_cov_cols + quantile_cov_cols
     )
     # step 1: build prediction model
-    model = sm.OLS(
+    mean_model = sm.OLS(
         df_cal["PHENO"],
         sm.add_constant(df_cal[["PRS_MEAN"] + mean_cov_cols]),
     ).fit()
+    mean_pred = mean_model.predict(sm.add_constant(df[["PRS_MEAN"] + mean_cov_cols]))
 
     # step 2:
     df_rls = pd.DataFrame(index=df.index)
-    assert q < 0.5, "q should be less than 0.5"
-    if method == "scale":
-        df_cal["CAL_SCALE"] = np.abs(df_cal["PHENO"] - model.fittedvalues) / (
+    if method in ["scale", "shift"]:
+        assert q < 0.5, "q should be less than 0.5"
+    elif method is None:
+        assert (
+            quantile_cov_cols == []
+        ), "When `method` is None, `quantile_cov_cols` should be empty"
+    else:
+        raise ValueError("method should be either scale or shift")
+
+    if method is None:
+        # only apply mean shift to the intervals
+        df_rls[f"PRS_Q_{q}"] = df[f"PRS_Q_{q}"] - df["PRS_MEAN"] + mean_pred
+        df_rls[f"PRS_Q_{1 - q}"] = df[f"PRS_Q_{1 - q}"] - df["PRS_MEAN"] + mean_pred
+    elif method == "scale":
+        df_cal["CAL_SCALE"] = np.abs(df_cal["PHENO"] - mean_model.fittedvalues) / (
             (df_cal[f"PRS_Q_{1 - q}"] - df_cal[f"PRS_Q_{q}"]) / 2
         )
-        pred = model.predict(sm.add_constant(df[["PRS_MEAN"] + mean_cov_cols]))
         interval_len = (df[f"PRS_Q_{1 - q}"] - df[f"PRS_Q_{q}"]) / 2
 
         if len(quantile_cov_cols) > 0:
@@ -196,52 +208,65 @@ def calibrate_prs(
             for col in quantile_cov_cols:
                 df["FITTED_CAL_SCALE"] += quantreg_model.params[col] * df[col]
 
-            # print(quantreg_model.summary())
-            df_rls[f"PRS_Q_{q}"] = pred - interval_len * df["FITTED_CAL_SCALE"]
-            df_rls[f"PRS_Q_{1 - q}"] = pred + interval_len * df["FITTED_CAL_SCALE"]
+            df_rls[f"PRS_Q_{q}"] = mean_pred - interval_len * df["FITTED_CAL_SCALE"]
+            df_rls[f"PRS_Q_{1 - q}"] = mean_pred + interval_len * df["FITTED_CAL_SCALE"]
         else:
             cal_scale = np.quantile(
-                np.abs(df_cal["PHENO"] - model.fittedvalues)
+                np.abs(df_cal["PHENO"] - mean_model.fittedvalues)
                 / ((df_cal[f"PRS_Q_{1 - q}"] - df_cal[f"PRS_Q_{q}"]) / 2),
                 1 - q * 2,
             )
-            df_rls[f"PRS_Q_{q}"] = pred - interval_len * cal_scale
-            df_rls[f"PRS_Q_{1 - q}"] = pred + interval_len * cal_scale
-        return df_rls
+            df_rls[f"PRS_Q_{q}"] = mean_pred - interval_len * cal_scale
+            df_rls[f"PRS_Q_{1 - q}"] = mean_pred + interval_len * cal_scale
 
     elif method == "shift":
-        upper = model.fittedvalues + (df_cal[f"PRS_Q_{1 - q}"] - df_cal["PRS_MEAN"])
-        lower = model.fittedvalues - (df_cal["PRS_MEAN"] - df_cal[f"PRS_Q_{q}"])
+        upper = mean_model.fittedvalues + (
+            df_cal[f"PRS_Q_{1 - q}"] - df_cal["PRS_MEAN"]
+        )
+        lower = mean_model.fittedvalues - (df_cal["PRS_MEAN"] - df_cal[f"PRS_Q_{q}"])
         df_cal["CAL_SHIFT"] = np.maximum(
             lower - df_cal["PHENO"], df_cal["PHENO"] - upper
         )
-        quantreg_model = smf.quantreg(
-            "CAL_SHIFT ~ 1 + " + "+".join([col for col in quantile_cov_cols]), df_cal
-        ).fit(q=(1 - q * 2))
 
-        df["FITTED_CAL_SHIFT"] = quantreg_model.params["Intercept"]
-        for col in quantile_cov_cols:
-            df["FITTED_CAL_SHIFT"] += quantreg_model.params[col] * df[col]
+        if len(quantile_cov_cols) > 0:
+            quantreg_model = smf.quantreg(
+                "CAL_SHIFT ~ 1 + " + "+".join([col for col in quantile_cov_cols]),
+                df_cal,
+            ).fit(q=(1 - q * 2))
 
-        # print(quantreg_model.summary())
-        pred = model.predict(sm.add_constant(df[["PRS_MEAN"] + mean_cov_cols]))
+            df["FITTED_CAL_SHIFT"] = quantreg_model.params["Intercept"]
+            for col in quantile_cov_cols:
+                df["FITTED_CAL_SHIFT"] += quantreg_model.params[col] * df[col]
 
-        df_rls[f"PRS_Q_{q}"] = (
-            pred - (df[f"PRS_MEAN"] - df[f"PRS_Q_{q}"]) - df["FITTED_CAL_SHIFT"]
-        )
+            df_rls[f"PRS_Q_{q}"] = (
+                mean_pred
+                - (df[f"PRS_MEAN"] - df[f"PRS_Q_{q}"])
+                - df["FITTED_CAL_SHIFT"]
+            )
 
-        df_rls[f"PRS_Q_{1 - q}"] = (
-            pred + (df[f"PRS_Q_{1 - q}"] - df[f"PRS_MEAN"]) + df["FITTED_CAL_SHIFT"]
-        )
-        return df_rls
+            df_rls[f"PRS_Q_{1 - q}"] = (
+                mean_pred
+                + (df[f"PRS_Q_{1 - q}"] - df[f"PRS_MEAN"])
+                + df["FITTED_CAL_SHIFT"]
+            )
+        else:
+            cal_shift = np.quantile(df_cal["CAL_SHIFT"], 1 - q * 2)
+            df_rls[f"PRS_Q_{q}"] = (
+                mean_pred - (df[f"PRS_MEAN"] - df[f"PRS_Q_{q}"]) - cal_shift
+            )
+            df_rls[f"PRS_Q_{1 - q}"] = (
+                mean_pred + (df[f"PRS_Q_{1 - q}"] - df[f"PRS_MEAN"]) + cal_shift
+            )
 
-        # quant_cal = df.loc[idx_cal, f"PRS_Q_{q}"]
-        # score_cal = quant_cal - df.loc[idx_cal, "PHENO"]
-        # correction_cal = np.quantile(score_cal, 1 - q)
+    return df_rls
 
-        # # predict test
-        # quant_test = df.loc[idx_test, f"PRS_Q_{q}"]
-        # corrected_test = quant_test - correction_cal
-        # df_rls[f"PRS_Q_{q}"] = df[f"PRS_Q_{q}"] - correction_cal
-        # df_rls = pd.DataFrame(df_rls, index=df.index)
-        # return df_rls.loc[idx_test]
+    # quant_cal = df.loc[idx_cal, f"PRS_Q_{q}"]
+    # score_cal = quant_cal - df.loc[idx_cal, "PHENO"]
+    # correction_cal = np.quantile(score_cal, 1 - q)
+
+    # # predict test
+    # quant_test = df.loc[idx_test, f"PRS_Q_{q}"]
+    # corrected_test = quant_test - correction_cal
+    # df_rls[f"PRS_Q_{q}"] = df[f"PRS_Q_{q}"] - correction_cal
+    # df_rls = pd.DataFrame(df_rls, index=df.index)
+    # return df_rls.loc[idx_test]
