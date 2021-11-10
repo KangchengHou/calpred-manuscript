@@ -1,3 +1,5 @@
+*.egg-info/
+__pycache__/
 OLD*/
 data-debug/
 data/
