@@ -5,6 +5,11 @@ To install the package,
 pip install -e .
 ```
 
+To use the package (for example),
+```python
+import admix_prs
+?admix_prs.calibrate_prs
+```
 ## File structures
 
 - `admix_prs/`: source code
