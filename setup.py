@@ -12,7 +12,7 @@ setup(
     name="admix-prs-uncertainty",
     version="0.1",
     description="Toolbox for analyzing genetics data from admixed population",
-    author="Kangcheng Hou",
+    author="Kangcheng Hou, Ziqi Xu",
     author_email="kangchenghou@gmail.com",
     packages=["admix_prs"],
     setup_requires=["numpy>=1.10"],

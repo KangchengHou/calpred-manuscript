@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import xarray as xr
 from tqdm import tqdm
 from os.path import join
 
