@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import random
 from scipy import stats
 
@@ -42,15 +43,16 @@ def stratify_calculate_r2(
     https://stats.stackexchange.com/questions/172662/how-do-you-calculate-the-standard-error-of-r2
     """
 
-    df = df.dropna(subset=['x_col', 'y_col'])
+    df = df.dropna(subset=[x_col, y_col])
 
     level_li = [i*(1/n_level) for i in range(n_level+1)]
-    qtl_li = df['stratify_col'].quantile(level_li).values
+    qtl_li = df[stratify_col].quantile(level_li).values
     grp_index_li = []
-    for grp_i in range(n_level-1):
-        grp_index_li.append(df.index[(qtl_li[grp_i] <= df['stratify_col']) & (df['stratify_col'] < qtl_li[grp_i+1])])
+    for grp_i in range(n_level):
+        grp_index_li.append(df.index[(qtl_li[grp_i] <= df[stratify_col]) & (df[stratify_col] <= qtl_li[grp_i+1])])
 
-    grp_index_li.append(df.index[(qtl_li[n_level-1] <= df['stratify_col']) & (df['stratify_col'] <= qtl_li[n_level])])
+    for grp_i in range(n_level):
+        post_all_pheno.loc[grp_index_li[grp_i], 'level'] = int(grp_i+1)
 
     grp_r2_samples = []
     for i_sample in range(n_sample):
@@ -58,7 +60,7 @@ def stratify_calculate_r2(
         grp_r2_li = []
         for i in range(n_level):
             grp_index_random.append(random.choices(grp_index_li[i], k=int(0.8*grp_index_li[i].shape[0])))
-            res = stats.linregress(df.loc[grp_index_random[i], 'x_col'], df.loc[grp_index_random[i], 'y_col'])
+            res = stats.linregress(df.loc[grp_index_random[i], x_col], df.loc[grp_index_random[i], y_col])
             grp_r2_li.append(res.rvalue**2)
         grp_r2_samples.append(grp_r2_li)
     
