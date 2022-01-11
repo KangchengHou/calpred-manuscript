@@ -4,7 +4,7 @@ import random
 from scipy import stats
 
 def stratify_calculate_r2(
-    df: pd.DataFrame, x_col: str, y_col: str, stratify_col: str, n_level: int = 5, n_sample: int = 10,  sample_prop: float = 0.8
+    df: pd.DataFrame, x_col: str, y_col: str, stratify_col: str, n_sample: int = 10,  sample_prop: float = 0.8
 ) -> pd.DataFrame:
     """
     Stratify dataframe by `stratify_col` with `n_level` levels; within each level of
@@ -21,12 +21,8 @@ def stratify_calculate_r2(
         Name of the column containing the response variable.
     stratify_col : str
         Name of the column containing the stratification variable.
-    n_level : int
-        Number of levels to stratify.
-
     n_sample : int
         Number of samplying to do.
-    
     sample_prop : float
         Proportion of sample size to population size
 
@@ -43,17 +39,25 @@ def stratify_calculate_r2(
     https://stats.stackexchange.com/questions/172662/how-do-you-calculate-the-standard-error-of-r2
     """
 
-    df = df.dropna(subset=[x_col, y_col])
-
-    level_li = [i*(1/n_level) for i in range(n_level+1)]
-    qtl_li = df[stratify_col].quantile(level_li).values
     grp_index_li = []
-    for grp_i in range(n_level):
-        grp_index_li.append(df.index[(qtl_li[grp_i] <= df[stratify_col]) & (df[stratify_col] <= qtl_li[grp_i+1])])
+    if len(np.unique(df[stratify_col])) > 5:
+        n_level = 5
+        level_li = [i*(1/n_level) for i in range(n_level+1)]
+        qtl_li = df[stratify_col].quantile(level_li).values
 
-    for grp_i in range(n_level):
-        post_all_pheno.loc[grp_index_li[grp_i], 'level'] = int(grp_i+1)
+        for grp_i in range(n_level):
+            grp_index_li.append(df.index[(qtl_li[grp_i] <= df[stratify_col]) & (df[stratify_col] <= qtl_li[grp_i+1])])
 
+        for grp_i in range(n_level):
+            df.loc[grp_index_li[grp_i], 'level'] = int(grp_i+1)
+
+    else:
+        n_level = len(np.unique(df[stratify_col]))
+        df['level'] = df[stratify_col]
+        for val in np.unique(df[stratify_col]):
+            grp_index_li.append(df.index[df.level == val])
+
+    
     grp_r2_samples = []
     for i_sample in range(n_sample):
         grp_index_random = []
@@ -63,6 +67,7 @@ def stratify_calculate_r2(
             res = stats.linregress(df.loc[grp_index_random[i], x_col], df.loc[grp_index_random[i], y_col])
             grp_r2_li.append(res.rvalue**2)
         grp_r2_samples.append(grp_r2_li)
+    
     
     avg_grp_r2 = np.mean(grp_r2_samples, axis=0)
     std_grp_r2 = np.std(grp_r2_samples, axis=0)
