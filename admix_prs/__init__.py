@@ -14,7 +14,14 @@ from ._utils import *
 
 
 def simulate_quant_pheno(
-    bfile_list, group_list, hsq, causal_prop, freq_file, out_prefix, n_sim=10
+    bfile_list,
+    group_list,
+    hsq,
+    causal_prop,
+    freq_file,
+    out_prefix,
+    hermodel="gcta",
+    n_sim=10,
 ):
     assert len(bfile_list) == len(group_list)
     geno = []
@@ -22,7 +29,7 @@ def simulate_quant_pheno(
     df_snp = None
 
     for bfile, group in zip(bfile_list, group_list):
-        this_geno, this_df_snp, this_df_indiv = dapgen.read_bfile(bfile, snp_chunk=5120)
+        this_geno, this_df_snp, this_df_indiv = dapgen.read_bfile(bfile, snp_chunk=1024)
         if df_snp is None:
             df_snp = this_df_snp
         else:
@@ -49,7 +56,7 @@ def simulate_quant_pheno(
     df_snp["FREQ"] = df_freq["ALT_FREQS"].values
     assert df_snp["FREQ"].isna().any() == False
 
-    snp_prior_var = admix.data.calc_snp_prior_var(df_snp, "gcta")
+    snp_prior_var = admix.data.calc_snp_prior_var(df_snp, hermodel)
 
     n_snp, n_indiv = geno.shape
     n_causal = int(n_snp * causal_prop)
@@ -81,7 +88,7 @@ def simulate_quant_pheno(
 
 def calc_prs(bfile, df_weights, n_sample=500):
 
-    geno, df_snp, df_indiv = dapgen.read_bfile(bfile)
+    geno, df_snp, df_indiv = dapgen.read_plink(bfile + ".bed")
 
     common_snps = set(df_snp.index) & set(df_weights.index)
     print(f"common snp proportion: {len(common_snps) / len(df_snp)}")
