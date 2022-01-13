@@ -7,8 +7,8 @@ def stratify_calculate_r2(
     df: pd.DataFrame, x_col: str, y_col: str, stratify_col: str, n_sample: int = 10,  sample_prop: float = 0.8
 ) -> pd.DataFrame:
     """
-    Stratify dataframe by `stratify_col` with `n_level` levels; within each level of
-    the stratification, calculate the R2 value of the regression of `y_col` on `x_col`.
+    Stratify dataframe by `stratify_col` with levels; within each level of the 
+    stratification, calculate the R2 value of the regression of `y_col` on `x_col`.
 
     Parameters
     ----------
@@ -29,7 +29,8 @@ def stratify_calculate_r2(
     Returns
     -------
     pandas.DataFrame
-        Dataframe with `n_level` rows and two columns `R2` and `R2_std`
+        Dataframe with n_level rows and three columns `level`, `R2`, and `R2_std`
+        - level: imputed levels based on stratify_col
         - R2: R2 between x_col and y_col within each level
         - R2_std: standard deviation of R2 within each level obtained with bootstrap
 
