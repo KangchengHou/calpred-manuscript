@@ -1,7 +1,7 @@
 #!/bin/sh
 #$ -cwd
 #$ -j y
-#$ -l h_data=10G,h_rt=12:00:00 -pe shared 6
+#$ -l h_data=6G,h_rt=15:00:00,highp -pe shared 6
 #$ -o ./job_out
 
 export OMP_NUM_THREADS=1
