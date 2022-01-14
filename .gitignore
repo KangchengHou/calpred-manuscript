@@ -1,3 +1,4 @@
+*.pkl
 *.egg-info/
 submitit-logs/
 __pycache__/

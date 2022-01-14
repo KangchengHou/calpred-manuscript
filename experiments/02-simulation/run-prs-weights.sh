@@ -1,8 +1,9 @@
 #!/bin/sh
 #$ -cwd
 #$ -j y
-#$ -l h_data=10G,h_rt=15:30:00 -pe shared 6
+#$ -l h_data=6G,h_rt=15:30:00 -pe shared 6
 #$ -o ./job_out
+#$ -t 1-10
 
 export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
