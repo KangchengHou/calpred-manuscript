@@ -3,13 +3,40 @@ import pandas as pd
 import random
 from scipy import stats
 
+def make_levels(
+    df: pd.DataFrame,
+    stratify_col: str,
+    n_level: int,
+) -> list:
+    """
+    Separate the dataframe by `stratify_col` into several levels;
+    levels imputed by the number of distinctive values in `stratify_col`.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Dataframe containing the data, must have columns `stratify_col`.
+    stratify_col : str
+        Name of the column to be stratified.
+    n_level : int = 
+
+    Returns
+    ----------
+    list
+        a list of indexes of levels.
+    """
+
+    level_li = [i * (1 / n_level) for i in range(n_level + 1)]
+    cut_li = pd.qcut(df[stratify_col], level_li)
+
+    return cut_li
 
 def stratify_calculate_r2(
     df: pd.DataFrame,
     x_col: str,
     y_col: str,
-    stratify_col: str,
     n_boostrap: int = 10,
+    grp_col: str = None,  # kwargs??
 ) -> pd.DataFrame:
     """
     Stratify dataframe by `stratify_col` with levels; within each level of the
@@ -24,65 +51,51 @@ def stratify_calculate_r2(
         Name of the column containing the predictor variable.
     y_col : str
         Name of the column containing the response variable.
-    stratify_col : str
-        Name of the column containing the stratification variable.
+    grp_col : str
+        Name of the column containing the group variable.
     n_boostrap : int
         Number of bootstrap samples to draw. Default is 10.
 
     Returns
     -------
     pandas.DataFrame
-        Dataframe with n_level rows and three columns `level`, `R2`, and `R2_std`
-        - level: imputed levels based on stratify_col
+        Dataframe with n_level rows and three columns `grp_col` / `indiv`, `R2`, and `R2_std`
+        - `grp_col` / `indiv`: the grp specified / all individuals without specification
         - R2: R2 between x_col and y_col within each level
         - R2_std: standard deviation of R2 within each level obtained with bootstrap
-
-    References
-    ----------
-    For bootstrap standard deviation, see:
-    https://stats.stackexchange.com/questions/172662/how-do-you-calculate-the-standard-error-of-r2
     """
-
-    grp_index_li = []
-    if len(np.unique(df[stratify_col])) > 5:
-        n_level = 5
-        level_li = [i * (1 / n_level) for i in range(n_level + 1)]
-        qtl_li = df[stratify_col].quantile(level_li).values
-
+    
+    if grp_col is not None:
+        grp_index_li, grp_li = [], []
+        grp_li = np.unique(df[grp_col])
+        n_level = len(grp_li)
         for grp_i in range(n_level):
             grp_index_li.append(
-                df.index[
-                    (qtl_li[grp_i] <= df[stratify_col])
-                    & (df[stratify_col] <= qtl_li[grp_i + 1])
-                ]
+                df.index[df[grp_col] == grp_li[grp_i]]
             )
 
-        for grp_i in range(n_level):
-            df.loc[grp_index_li[grp_i], "level"] = int(grp_i + 1)
+        grp_r2_samples = []
+        for _ in range(n_boostrap):
+            grp_index_random = []
+            grp_r2_li = []
+            for i in range(n_level):
+                grp_index_random.append(
+                    random.choices(grp_index_li[i], k=len(grp_index_li[i]))
+                )
+                res = stats.linregress(
+                    df.loc[grp_index_random[i], x_col], df.loc[grp_index_random[i], y_col]
+                )
+                grp_r2_li.append(res.rvalue ** 2)
+            grp_r2_samples.append(grp_r2_li)
 
+        avg_grp_r2 = np.mean(grp_r2_samples, axis=0)
+        std_grp_r2 = np.std(grp_r2_samples, axis=0)
+        d = {grp_col: grp_li, "R2": avg_grp_r2, "R2_std": std_grp_r2}   
+    
     else:
-        n_level = len(np.unique(df[stratify_col]))
-        df["level"] = df[stratify_col]
-        for val in np.unique(df[stratify_col]):
-            grp_index_li.append(df.index[df.level == val])
-
-    grp_r2_samples = []
-    for _ in range(n_boostrap):
-        grp_index_random = []
-        grp_r2_li = []
-        for i in range(n_level):
-            grp_index_random.append(
-                random.choices(grp_index_li[i], k=len(grp_index_li[i]))
-            )
-            res = stats.linregress(
-                df.loc[grp_index_random[i], x_col], df.loc[grp_index_random[i], y_col]
-            )
-            grp_r2_li.append(res.rvalue ** 2)
-        grp_r2_samples.append(grp_r2_li)
-
-    avg_grp_r2 = np.mean(grp_r2_samples, axis=0)
-    std_grp_r2 = np.std(grp_r2_samples, axis=0)
-    d = {"level": range(1, n_level + 1), "R2": avg_grp_r2, "R2_std": std_grp_r2}
+        res = stats.linregress(df.loc[:, x_col], df.loc[:, y_col])
+        d = {"indiv": ["all"], "R2": [res.rvalue**2]}
+    
     output = pd.DataFrame(data=d)
     return output
 
@@ -92,7 +105,7 @@ def eval_calibration(
     x_col: str,
     lower_col: str,
     upper_col: str,
-    stratify_col: str,
+    grp_col: str = None,
 ) -> pd.DataFrame:
     """
     Stratify dataframe by `stratify_col` with levels; within each level of the
@@ -105,8 +118,8 @@ def eval_calibration(
         Dataframe containing the data, must have columns `x_col` and `y_col`.
     x_col : str
         Name of the column containing the real data variable.
-    stratify_col : str
-        Name of the column containing the stratification variable.
+    grp_col : str
+        Name of the column containing the group variable.
     lower_col : str
         Name of the column containing the prediction lower quantile variable.
     upper_col : str
@@ -115,46 +128,37 @@ def eval_calibration(
     Returns
     -------
     pandas.DataFrame
-        Dataframe with n_level rows and two columns `level` and `Coverage`
-        - level: imputed levels based on stratify_col
+        Dataframe with n_level rows and two columns `grp_col` / `indiv` and `Coverage`
+        - `grp_col` / `indiv`: the grp specified / all individuals without specification
         - Coverage: Coverage of our prediction interval for x_col in each ancestry population
 
     """
 
-    grp_index_li = []
-    if len(np.unique(df[stratify_col])) > 5:
-        n_level = 5
-        level_li = [i * (1 / n_level) for i in range(n_level + 1)]
-        qtl_li = df[stratify_col].quantile(level_li).values
-
+    if grp_col is not None:
+        grp_index_li, grp_li = [], []
+        grp_li = np.unique(df[grp_col])
+        n_level = len(grp_li)
         for grp_i in range(n_level):
             grp_index_li.append(
-                df.index[
-                    (qtl_li[grp_i] <= df[stratify_col])
-                    & (df[stratify_col] <= qtl_li[grp_i + 1])
-                ]
+                df.index[df[grp_col] == grp_li[grp_i]]
             )
 
-        for grp_i in range(n_level):
-            df.loc[grp_index_li[grp_i], "level"] = int(grp_i + 1)
+        grp_hits_li = []
+        for i in range(n_level):
+            grp_hits_li.append(
+                (df.loc[grp_index_li[i], lower_col] < df.loc[grp_index_li[i], x_col])
+                & (df.loc[grp_index_li[i], x_col] < df.loc[grp_index_li[i], upper_col])
+            )
 
+        grp_hits_prop_li = []
+        for i in range(n_level):
+            grp_hits_prop_li.append(np.mean(grp_hits_li[i]))
+
+        d = {grp_col: grp_li, "Coverage": grp_hits_prop_li}
     else:
-        n_level = len(np.unique(df[stratify_col]))
-        df["level"] = df[stratify_col]
-        for val in np.unique(df[stratify_col]):
-            grp_index_li.append(df.index[df.level == val])
-
-    grp_hits_li = []
-    for i in range(n_level):
-        grp_hits_li.append(
-            (df[lower_col].values < df[x_col].values)
-            & (df[x_col].values < df[upper_col].values)
-        )
-
-    grp_hits_prop_li = []
-    for i in range(n_level):
-        grp_hits_prop_li.append(np.mean(grp_hits_li[i]))
-
-    d = {"level": range(1, n_level + 1), "coverage": grp_hits_prop_li}
+        res = np.array((df.loc[:, lower_col] < df.loc[:, x_col])
+                & (df.loc[:, x_col] < df.loc[:, upper_col]))
+        d = {"indiv": df.index, "Coverage": res}
+    
     output = pd.DataFrame(data=d)
     return output
