@@ -36,7 +36,7 @@ def stratify_calculate_r2(
     x_col: str,
     y_col: str,
     n_boostrap: int = 10,
-    grp_col: str = None,  # kwargs??
+    grp_col: str = None,  
 ) -> pd.DataFrame:
     """
     Stratify dataframe by `stratify_col` with levels; within each level of the
@@ -65,16 +65,17 @@ def stratify_calculate_r2(
         - R2_std: standard deviation of R2 within each level obtained with bootstrap
     """
     
+    grp_index_li = []
+    grp_r2_samples = []
     if grp_col is not None:
-        grp_index_li, grp_li = [], []
+        grp_li = []
         grp_li = np.unique(df[grp_col])
         n_level = len(grp_li)
         for grp_i in range(n_level):
             grp_index_li.append(
                 df.index[df[grp_col] == grp_li[grp_i]]
             )
-
-        grp_r2_samples = []
+            
         for _ in range(n_boostrap):
             grp_index_random = []
             grp_r2_li = []
@@ -87,17 +88,28 @@ def stratify_calculate_r2(
                 )
                 grp_r2_li.append(res.rvalue ** 2)
             grp_r2_samples.append(grp_r2_li)
-
-        avg_grp_r2 = np.mean(grp_r2_samples, axis=0)
-        std_grp_r2 = np.std(grp_r2_samples, axis=0)
-        d = {grp_col: grp_li, "R2": avg_grp_r2, "R2_std": std_grp_r2}   
-    
+            
     else:
-        res = stats.linregress(df.loc[:, x_col], df.loc[:, y_col])
-        d = {"indiv": ["all"], "R2": [res.rvalue**2]}
+        for _ in range(n_boostrap):
+            grp_index_random = random.choices(df.index, k=int(len(df.index)*0.8))
+            res = stats.linregress(
+                df.loc[grp_index_random, x_col], df.loc[grp_index_random, y_col]
+            )
+            grp_r2_samples.append(res.rvalue ** 2)
+    
+    avg_grp_r2 = np.mean(grp_r2_samples, axis=0)
+    std_grp_r2 = np.std(grp_r2_samples, axis=0)
+
+        
+    if grp_col is not None:
+        d = {grp_col: grp_li, "R2": avg_grp_r2, "R2_std": std_grp_r2}   
+    else:
+        d = {"R2": [avg_grp_r2], "R2_std": [std_grp_r2]}
     
     output = pd.DataFrame(data=d)
     return output
+
+
 
 
 def eval_calibration(
@@ -158,7 +170,7 @@ def eval_calibration(
     else:
         res = np.array((df.loc[:, lower_col] < df.loc[:, x_col])
                 & (df.loc[:, x_col] < df.loc[:, upper_col]))
-        d = {"indiv": df.index, "Coverage": res}
+        d = {"Coverage": res}
     
     output = pd.DataFrame(data=d)
     return output
