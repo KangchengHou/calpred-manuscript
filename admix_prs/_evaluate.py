@@ -3,6 +3,7 @@ import pandas as pd
 import random
 from scipy import stats
 
+
 def make_levels(
     df: pd.DataFrame,
     stratify_col: str,
@@ -18,7 +19,7 @@ def make_levels(
         Dataframe containing the data, must have columns `stratify_col`.
     stratify_col : str
         Name of the column to be stratified.
-    n_level : int = 
+    n_level : int =
 
     Returns
     ----------
@@ -31,12 +32,13 @@ def make_levels(
 
     return cut_li
 
+
 def stratify_calculate_r2(
     df: pd.DataFrame,
     x_col: str,
     y_col: str,
     n_boostrap: int = 10,
-    grp_col: str = None,  
+    group_col: str = None,
 ) -> pd.DataFrame:
     """
     Stratify dataframe by `stratify_col` with levels; within each level of the
@@ -51,7 +53,7 @@ def stratify_calculate_r2(
         Name of the column containing the predictor variable.
     y_col : str
         Name of the column containing the response variable.
-    grp_col : str
+    group_col : str
         Name of the column containing the group variable.
     n_boostrap : int
         Number of bootstrap samples to draw. Default is 10.
@@ -59,23 +61,21 @@ def stratify_calculate_r2(
     Returns
     -------
     pandas.DataFrame
-        Dataframe with n_level rows and three columns `grp_col` / `indiv`, `R2`, and `R2_std`
-        - `grp_col` / `indiv`: the grp specified / all individuals without specification
+        Dataframe with n_level rows and three columns `group_col` / `indiv`, `R2`, and `R2_std`
+        - `group_col` / `indiv`: the grp specified / all individuals without specification
         - R2: R2 between x_col and y_col within each level
         - R2_std: standard deviation of R2 within each level obtained with bootstrap
     """
-    
+
     grp_index_li = []
     grp_r2_samples = []
-    if grp_col is not None:
+    if group_col is not None:
         grp_li = []
-        grp_li = np.unique(df[grp_col])
+        grp_li = np.unique(df[group_col])
         n_level = len(grp_li)
         for grp_i in range(n_level):
-            grp_index_li.append(
-                df.index[df[grp_col] == grp_li[grp_i]]
-            )
-            
+            grp_index_li.append(df.index[df[group_col] == grp_li[grp_i]])
+
         for _ in range(n_boostrap):
             grp_index_random = []
             grp_r2_li = []
@@ -84,32 +84,29 @@ def stratify_calculate_r2(
                     random.choices(grp_index_li[i], k=len(grp_index_li[i]))
                 )
                 res = stats.linregress(
-                    df.loc[grp_index_random[i], x_col], df.loc[grp_index_random[i], y_col]
+                    df.loc[grp_index_random[i], x_col],
+                    df.loc[grp_index_random[i], y_col],
                 )
                 grp_r2_li.append(res.rvalue ** 2)
             grp_r2_samples.append(grp_r2_li)
-            
+
     else:
         for _ in range(n_boostrap):
-            grp_index_random = random.choices(df.index, k=int(len(df.index)*0.8))
+            grp_index_random = random.choices(df.index, k=int(len(df.index) * 0.8))
             res = stats.linregress(
                 df.loc[grp_index_random, x_col], df.loc[grp_index_random, y_col]
             )
             grp_r2_samples.append(res.rvalue ** 2)
-    
+
     avg_grp_r2 = np.mean(grp_r2_samples, axis=0)
     std_grp_r2 = np.std(grp_r2_samples, axis=0)
 
-        
-    if grp_col is not None:
-        d = {grp_col: grp_li, "R2": avg_grp_r2, "R2_std": std_grp_r2}   
+    if group_col is not None:
+        d = {group_col: grp_li, "R2": avg_grp_r2, "R2_std": std_grp_r2}
+        return pd.DataFrame(data=d)
     else:
         d = {"R2": [avg_grp_r2], "R2_std": [std_grp_r2]}
-    
-    output = pd.DataFrame(data=d)
-    return output
-
-
+        return pd.Series(data=d)
 
 
 def eval_calibration(
@@ -117,7 +114,7 @@ def eval_calibration(
     x_col: str,
     lower_col: str,
     upper_col: str,
-    grp_col: str = None,
+    group_col: str = None,
 ) -> pd.DataFrame:
     """
     Stratify dataframe by `stratify_col` with levels; within each level of the
@@ -130,7 +127,7 @@ def eval_calibration(
         Dataframe containing the data, must have columns `x_col` and `y_col`.
     x_col : str
         Name of the column containing the real data variable.
-    grp_col : str
+    group_col : str
         Name of the column containing the group variable.
     lower_col : str
         Name of the column containing the prediction lower quantile variable.
@@ -140,20 +137,18 @@ def eval_calibration(
     Returns
     -------
     pandas.DataFrame
-        Dataframe with n_level rows and two columns `grp_col` / `indiv` and `Coverage`
-        - `grp_col` / `indiv`: the grp specified / all individuals without specification
+        Dataframe with n_level rows and two columns `group_col` / `indiv` and `Coverage`
+        - `group_col` / `indiv`: the grp specified / all individuals without specification
         - Coverage: Coverage of our prediction interval for x_col in each ancestry population
 
     """
 
-    if grp_col is not None:
+    if group_col is not None:
         grp_index_li, grp_li = [], []
-        grp_li = np.unique(df[grp_col])
+        grp_li = np.unique(df[group_col])
         n_level = len(grp_li)
         for grp_i in range(n_level):
-            grp_index_li.append(
-                df.index[df[grp_col] == grp_li[grp_i]]
-            )
+            grp_index_li.append(df.index[df[group_col] == grp_li[grp_i]])
 
         grp_hits_li = []
         for i in range(n_level):
@@ -166,11 +161,12 @@ def eval_calibration(
         for i in range(n_level):
             grp_hits_prop_li.append(np.mean(grp_hits_li[i]))
 
-        d = {grp_col: grp_li, "Coverage": grp_hits_prop_li}
+        d = {group_col: grp_li, "coverage": grp_hits_prop_li}
+        return pd.DataFrame(data=d)
     else:
-        res = np.array((df.loc[:, lower_col] < df.loc[:, x_col])
-                & (df.loc[:, x_col] < df.loc[:, upper_col]))
-        d = {"Coverage": res}
-    
-    output = pd.DataFrame(data=d)
-    return output
+        res = np.array(
+            (df.loc[:, lower_col] < df.loc[:, x_col])
+            & (df.loc[:, x_col] < df.loc[:, upper_col])
+        ).mean()
+        d = {"coverage": res}
+        return pd.Series(data=d)
