@@ -9,3 +9,4 @@ data/
 dask-worker-space/
 job_out
 .ipynb_checkpoints/
+.DS_Store
