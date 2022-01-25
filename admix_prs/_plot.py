@@ -24,7 +24,7 @@ def plot_calibration(
         n_group = len(group_labels)
     else:
         df_grouped = [("all", df)]
-        group_labels = "All"
+        group_labels = ["All"]
         n_group = 1
 
     for i, (group, df_group) in enumerate(df_grouped):
