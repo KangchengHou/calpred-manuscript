@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import random
 from scipy import stats
+from sklearn.metrics import r2_score
 
 
 def make_levels(
@@ -109,9 +110,73 @@ def stratify_calculate_r2(
         return pd.Series(data=d)
 
 
+def evaluate(
+    df: pd.DataFrame,
+    true_col: str,
+    lower_col: str,
+    upper_col: str,
+    group_col: str = None,
+):
+    """
+    Evaluate R2, coverage, interval length for different groups.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Dataframe containing the data, must have columns `true_col`, `lower_col`,
+        `upper_col`, and `group_col`.
+    true_col : str
+        Name of the column containing the true value.
+    lower_col : str
+        Name of the column containing the lower bound of the interval.
+    upper_col : str
+        Name of the column containing the upper bound of the interval.
+    group_col : str
+        Name of the column containing the group variable.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Dataframe with n_level rows and three columns `group_col`, `r2`, `coverage`,
+        and `interval_length`
+    """
+    if group_col is not None:
+        df_grouped = df.groupby(group_col)
+        r2 = df_grouped.apply(
+            lambda df: stats.linregress(
+                (df[lower_col] + df[upper_col]) / 2, df[true_col]
+            ).rvalue
+            ** 2
+        )
+
+        coverage = df_grouped.apply(
+            lambda df: df[true_col].between(df[lower_col], df[upper_col]).mean()
+        )
+        length = df_grouped.apply(lambda df: (df[upper_col] - df[lower_col]).mean())
+        df = {
+            "r2": r2,
+            "coverage": coverage,
+            "length": length,
+        }
+        return pd.DataFrame(data=df)
+    else:
+        r2 = (
+            stats.linregress((df[lower_col] + df[upper_col]) / 2, df[true_col]).rvalue
+            ** 2
+        )
+        coverage = df[true_col].between(df[lower_col], df[upper_col]).mean()
+        length = (df[upper_col] - df[lower_col]).mean()
+        df = {
+            "r2": r2,
+            "coverage": coverage,
+            "length": length,
+        }
+        return pd.Series(data=df)
+
+
 def eval_calibration(
     df: pd.DataFrame,
-    x_col: str,
+    y_col: str,
     lower_col: str,
     upper_col: str,
     group_col: str = None,
@@ -125,7 +190,7 @@ def eval_calibration(
     ----------
     df : pandas.DataFrame
         Dataframe containing the data, must have columns `x_col` and `y_col`.
-    x_col : str
+    y_col : str
         Name of the column containing the real data variable.
     group_col : str
         Name of the column containing the group variable.
@@ -153,8 +218,8 @@ def eval_calibration(
         grp_hits_li = []
         for i in range(n_level):
             grp_hits_li.append(
-                (df.loc[grp_index_li[i], lower_col] < df.loc[grp_index_li[i], x_col])
-                & (df.loc[grp_index_li[i], x_col] < df.loc[grp_index_li[i], upper_col])
+                (df.loc[grp_index_li[i], lower_col] < df.loc[grp_index_li[i], y_col])
+                & (df.loc[grp_index_li[i], y_col] < df.loc[grp_index_li[i], upper_col])
             )
 
         grp_hits_prop_li = []
@@ -165,8 +230,8 @@ def eval_calibration(
         return pd.DataFrame(data=d)
     else:
         res = np.array(
-            (df.loc[:, lower_col] < df.loc[:, x_col])
-            & (df.loc[:, x_col] < df.loc[:, upper_col])
+            (df.loc[:, lower_col] < df.loc[:, y_col])
+            & (df.loc[:, y_col] < df.loc[:, upper_col])
         ).mean()
         d = {"coverage": res}
         return pd.Series(data=d)

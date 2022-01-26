@@ -9,8 +9,7 @@ import structlog
 
 def calibrate_pred(
     df: pd.DataFrame,
-    pheno_col: str,
-    pred_col: str,
+    true_col: str,
     lower_col: str,
     upper_col: str,
     calibrate_idx: pd.Index,
@@ -49,39 +48,15 @@ def calibrate_pred(
         calibration
     method: str
         method for calibration, "scale" or "shift"
-
-    Comments
-    --------
-    The following is useful for plotting:
-    q = 0.1
-    df_cal = df_summary
-    model = sm.OLS(
-        df_cal["PHENO"],
-        sm.add_constant(df_cal[["PRS_MEAN"] + cov_cols]),
-    ).fit()
-
-    df_cal["CAL_SCALE"] = np.abs(df_cal["PHENO"] - model.fittedvalues) / (
-        (df_cal[f"PRS_Q_{1 - q}"] - df_cal[f"PRS_Q_{q}"]) / 2
-    )
-
-    sns.scatterplot(data=df_cal, x="PC1", y="CAL_SCALE", hue="GROUP")
-
-    model = smf.quantreg("CAL_SCALE ~ 1 + PC1 + PC2", df_cal).fit(q=0.8)
-    df_cal["FITTED_CAL_SCALE"] = (
-       model.params["Intercept"]
-        + model.params["PC1"] * df_cal["PC1"]
-    #     + model.params["PC2"] * df_cal["PC2"]
-    # )
-    # plt.plot(df_cal["PC1"], model.params["Intercept"] + model.params["PC1"] * df_cal["PC1"] + )
-
-    # df_cal.groupby("GROUP").apply(lambda x: np.quantile(x["CAL_SCALE"], 0.8))
-    # df_cal.groupby("GROUP").apply(lambda x: np.quantile(x["FITTED_CAL_SCALE"], 0.8))
     """
     log = structlog.get_logger()
 
     assert method in ["scale", "shift"] or method is None
-    assert np.all([col in df.columns for col in [pheno_col, "PRS_MEAN"]])
+    assert np.all([col in df.columns for col in [true_col, lower_col, upper_col]])
     df = df.copy()
+    pred_col = "PRED"
+    assert pred_col not in df.columns
+    df[pred_col] = (df[lower_col] + df[upper_col]) / 2
 
     if mean_adjust_cols is None:
         mean_adjust_cols = []
@@ -90,23 +65,26 @@ def calibrate_pred(
         quantile_adjust_cols = []
 
     df_calibrate = df.loc[calibrate_idx].dropna(
-        subset=[pheno_col, pred_col, lower_col, upper_col]
+        subset=[true_col, pred_col, lower_col, upper_col]
         + mean_adjust_cols
         + quantile_adjust_cols
     )
     # step 1: build prediction model with pheno ~ pred_col + mean_adjust_cols + ...
+
     mean_model = sm.OLS(
-        df_calibrate[pheno_col],
+        df_calibrate[true_col],
         sm.add_constant(df_calibrate[[pred_col] + mean_adjust_cols]),
     ).fit()
     # produce prediction for all individuals
     mean_pred = mean_model.predict(sm.add_constant(df[[pred_col] + mean_adjust_cols]))
     log.info(
-        f"Regress pred_col={pred_col} against mean_adjust_cols={mean_adjust_cols} fitted with `calibrate_index` individuals",
+        f"Regress pred_col={pred_col} against "
+        f"mean_adjust_cols={mean_adjust_cols} fitted with `calibrate_index` individuals",
     )
+    log.info(f"mean_model.summary(): {mean_model.summary()}")
     # step 2:
     df_res = pd.DataFrame(
-        {pred_col: mean_pred},
+        {"PRED": mean_pred},
         index=df.index,
     )
     if method in ["scale", "shift"]:
@@ -134,7 +112,7 @@ def calibrate_pred(
             " `calibrate_index` individuals",
         )
         df_calibrate["tmp_scale"] = np.abs(
-            df_calibrate[pheno_col] - mean_model.fittedvalues
+            df_calibrate[true_col] - mean_model.fittedvalues
         ) / ((df_calibrate[upper_col] - df_calibrate[lower_col]) / 2)
 
         interval_len = (df[upper_col] - df[lower_col]) / 2
@@ -152,7 +130,7 @@ def calibrate_pred(
             df_res[upper_col] = mean_pred + interval_len * df["tmp_fitted_scale"]
         else:
             cal_scale = np.quantile(
-                np.abs(df_calibrate[pheno_col] - mean_model.fittedvalues)
+                np.abs(df_calibrate[true_col] - mean_model.fittedvalues)
                 / ((df_calibrate[upper_col] - df_calibrate[lower_col]) / 2),
                 1 - q * 2,
             )
@@ -172,7 +150,7 @@ def calibrate_pred(
             df_calibrate[pred_col] - df_calibrate[lower_col]
         )
         df_calibrate["tmp_shift"] = np.maximum(
-            lower - df_calibrate[pheno_col], df_calibrate[pheno_col] - upper
+            lower - df_calibrate[true_col], df_calibrate[true_col] - upper
         )
 
         if len(quantile_adjust_cols) > 0:
@@ -198,14 +176,3 @@ def calibrate_pred(
             df_res[upper_col] = mean_pred + (df[upper_col] - df[pred_col]) + cal_shift
 
     return df_res
-
-    # quant_cal = df.loc[idx_cal, f"PRS_Q_{q}"]
-    # score_cal = quant_cal - df.loc[idx_cal, "PHENO"]
-    # correction_cal = np.quantile(score_cal, 1 - q)
-
-    # # predict test
-    # quant_test = df.loc[idx_test, f"PRS_Q_{q}"]
-    # corrected_test = quant_test - correction_cal
-    # df_res[f"PRS_Q_{q}"] = df[f"PRS_Q_{q}"] - correction_cal
-    # df_res = pd.DataFrame(df_res, index=df.index)
-    # return df_res.loc[idx_test]
