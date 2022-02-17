@@ -7,6 +7,90 @@ import warnings
 from typing import List
 import structlog
 import statsmodels.api as sm
+import matplotlib.pyplot as plt
+from scipy import stats
+
+
+def het_breuschpagan(resid, exog_het, robust=True):
+    r"""
+    Breusch-Pagan Lagrange Multiplier test for heteroscedasticity
+
+    The tests the hypothesis that the residual variance does not depend on
+    the variables in x in the form
+
+    .. :math: \sigma_i = \sigma * f(\alpha_0 + \alpha z_i)
+
+    Homoscedasticity implies that :math:`\alpha=0`.
+
+    Parameters
+    ----------
+    resid : array_like
+        For the Breusch-Pagan test, this should be the residual of a
+        regression. If an array is given in exog, then the residuals are
+        calculated by the an OLS regression or resid on exog. In this case
+        resid should contain the dependent variable. Exog can be the same as x.
+    exog_het : array_like
+        This contains variables suspected of being related to
+        heteroscedasticity in resid.
+    robust : bool, default True
+        Flag indicating whether to use the Koenker version of the
+        test (default) which assumes independent and identically distributed
+        error terms, or the original Breusch-Pagan version which assumes
+        residuals are normally distributed.
+
+    Returns
+    -------
+    lm : float
+        lagrange multiplier statistic
+    lm_pvalue : float
+        p-value of lagrange multiplier test
+    fvalue : float
+        f-statistic of the hypothesis that the error variance does not depend
+        on x
+    f_pvalue : float
+        p-value for the f-statistic
+
+    Notes
+    -----
+    Assumes x contains constant (for counting dof and calculation of R^2).
+    In the general description of LM test, Greene mentions that this test
+    exaggerates the significance of results in small or moderately large
+    samples. In this case the F-statistic is preferable.
+
+    **Verification**
+
+    Chisquare test statistic is exactly (<1e-13) the same result as bptest
+    in R-stats with defaults (studentize=True).
+
+    **Implementation**
+
+    This is calculated using the generic formula for LM test using $R^2$
+    (Greene, section 17.6) and not with the explicit formula
+    (Greene, section 11.4.3), unless `robust` is set to False.
+    The degrees of freedom for the p-value assume x is full rank.
+
+    References
+    ----------
+    .. [1] Greene, W. H. Econometric Analysis. New Jersey. Prentice Hall;
+       5th edition. (2002).
+    .. [2]  Breusch, T. S.; Pagan, A. R. (1979). "A Simple Test for
+       Heteroskedasticity and Random Coefficient Variation". Econometrica.
+       47 (5): 1287–1294.
+    .. [3] Koenker, R. (1981). "A note on studentizing a test for
+       heteroskedasticity". Journal of Econometrics 17 (1): 107–112.
+    """
+
+    x = np.asarray(exog_het)
+    y = np.asarray(resid) ** 2
+    if not robust:
+        y = y / np.mean(y)
+    nobs, nvars = x.shape
+    resols = sm.OLS(y, x).fit()
+    fval = resols.fvalue
+    fpval = resols.f_pvalue
+    lm = nobs * resols.rsquared if robust else resols.ess / 2
+    # Note: degrees of freedom for LM test is nvars minus constant
+    return lm, stats.chi2.sf(lm, nvars - 1), fval, fpval, resols
 
 
 def test_het_breuschpagan(
@@ -15,6 +99,7 @@ def test_het_breuschpagan(
     pred_col: str,
     test_col: str,
     control_cols: List[str] = None,
+    plot: bool = False,
 ):
     """
     Test whether a specific covariate influence the predictivity of PRS.
@@ -42,6 +127,7 @@ def test_het_breuschpagan(
     -------
     pd.Series
         containing p-value, etc.
+    het_model: sm.OLS results from resid ** 2 ~ test
     """
     # Fit regression model (using the natural log of one of the regressors)
     y, pred, test = df[y_col], df[[pred_col]], df[[test_col]]
@@ -53,8 +139,15 @@ def test_het_breuschpagan(
 
     names = ["Lagrange multiplier statistic", "p-value", "f-value", "f p-value"]
     # exog_het must always contain a constant
-    het_test = sms.het_breuschpagan(resid=model.resid, exog_het=sm.add_constant(test))
-    return pd.Series(index=names, data=het_test)
+    het_test = het_breuschpagan(resid=model.resid, exog_het=sm.add_constant(test))
+
+    if plot:
+        ax = plt.gca()
+        ax.scatter(test, model.resid, s=1, alpha=0.05)
+        ax.set_xlabel(test_col)
+        ax.set_ylabel("Residuals")
+
+    return pd.Series(index=names, data=het_test[0:4]), het_test[4]
 
 
 def calibrate_pred(
