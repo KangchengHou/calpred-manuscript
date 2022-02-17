@@ -5,35 +5,6 @@ from scipy import stats
 from sklearn.metrics import r2_score
 
 
-def make_levels(
-    df: pd.DataFrame,
-    stratify_col: str,
-    n_level: int,
-) -> list:
-    """
-    Separate the dataframe by `stratify_col` into several levels;
-    levels imputed by the number of distinctive values in `stratify_col`.
-
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        Dataframe containing the data, must have columns `stratify_col`.
-    stratify_col : str
-        Name of the column to be stratified.
-    n_level : int =
-
-    Returns
-    ----------
-    list
-        a list of indexes of levels.
-    """
-
-    level_li = [i * (1 / n_level) for i in range(n_level + 1)]
-    cut_li = pd.qcut(df[stratify_col], level_li)
-
-    return cut_li
-
-
 def stratify_calculate_r2(
     df: pd.DataFrame,
     x_col: str,
