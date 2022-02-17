@@ -152,14 +152,14 @@ def test_het_breuschpagan(
 
 def calibrate_pred(
     df: pd.DataFrame,
-    true_col: str,
-    lower_col: str,
-    upper_col: str,
+    y_col: str,
+    pred_col: str,
+    predstd_col: str,
     calibrate_idx: pd.Index,
-    q: float = 0.1,
-    method: str = None,
+    ci: float = 0.9,
+    ci_method: str = None,
     mean_adjust_cols: List[str] = None,
-    quantile_adjust_cols: List[str] = None,
+    ci_adjust_cols: List[str] = None,
 ):
     """
     Perform calibration:
@@ -170,152 +170,135 @@ def calibrate_pred(
     Parameters
     ---------
     df: pd.DataFrame
-        containing <pheno_col>, <pred_col>, <lower_col>, <upper_col>, and other
+        containing <y_col>, <pred_col>, <predstd_col>,
         covariates
-    pheno_col: str
+    y_col: str
         column name of phenotype
     pred_col: str
         column name of predicted value
-    lower_col: str
+    predstd_col: str
         column name of lower bound of interval
-    upper_col: str
-        column name of upper bound of interval
     calibrate_idx: list
         list of index of individuals used for training calibration
     mean_adjust_cols: list
         list of covariates used for calibrating the mean
-    quantile_adjust_cols: list
+    ci_adjust_cols: list
         list of covariates used for calibrating the quantile
-    q: float
+    ci: float
         target quantile, default 0.1, <lower_col> and <upper_col> will be used for
         calibration
     method: str
         method for calibration, "scale" or "shift"
     """
+    ci_z = stats.norm.ppf((1 + ci) / 2)
     log = structlog.get_logger()
 
-    assert method in ["scale", "shift"] or method is None
-    assert np.all([col in df.columns for col in [true_col, lower_col, upper_col]])
-    df = df.copy()
-    pred_col = "PRED"
-    assert pred_col not in df.columns
-    df[pred_col] = (df[lower_col] + df[upper_col]) / 2
+    assert ci_method in ["scale", "shift"] or ci_method is None
+    assert np.all([col in df.columns for col in [y_col, pred_col, predstd_col]])
+    df_raw = df.copy()
 
     if mean_adjust_cols is None:
         mean_adjust_cols = []
 
-    if quantile_adjust_cols is None:
-        quantile_adjust_cols = []
+    if ci_adjust_cols is None:
+        ci_adjust_cols = []
 
-    df_calibrate = df.loc[calibrate_idx].dropna(
-        subset=[true_col, pred_col, lower_col, upper_col]
-        + mean_adjust_cols
-        + quantile_adjust_cols
+    df_calibrate = df_raw.loc[calibrate_idx].dropna(
+        subset=[y_col, pred_col, predstd_col] + mean_adjust_cols + ci_adjust_cols
     )
     # step 1: build prediction model with pheno ~ pred_col + mean_adjust_cols + ...
 
     mean_model = sm.OLS(
-        df_calibrate[true_col],
+        df_calibrate[y_col],
         sm.add_constant(df_calibrate[[pred_col] + mean_adjust_cols]),
     ).fit()
     # produce prediction for all individuals
-    mean_pred = mean_model.predict(sm.add_constant(df[[pred_col] + mean_adjust_cols]))
+    mean_pred = mean_model.predict(
+        sm.add_constant(df_raw[[pred_col] + mean_adjust_cols])
+    )
     log.info(
         f"Regress pred_col={pred_col} against "
         f"mean_adjust_cols={mean_adjust_cols} fitted with `calibrate_index` individuals",
     )
     log.info(f"mean_model.summary(): {mean_model.summary()}")
+
     # step 2:
     df_res = pd.DataFrame(
-        {"PRED": mean_pred},
-        index=df.index,
+        {pred_col: mean_pred},
+        index=df_raw.index,
     )
-    if method in ["scale", "shift"]:
-        assert q < 0.5, "q should be less than 0.5"
+    if ci_method in ["scale", "shift"]:
+        assert (ci > 0) & (ci < 1), "ci should be between 0 and 1"
 
-    elif method is None:
-        if len(quantile_adjust_cols) > 0:
-            warnings.warn(
-                "`quantile_adjust_cols` will not be used because `method` is None"
-            )
+    elif ci_method is None:
+        if len(ci_adjust_cols) > 0:
+            warnings.warn("`ci_adjust_cols` will not be used because `method` is None")
+        df_res[predstd_col] = df_raw[predstd_col]
     else:
         raise ValueError("method should be either scale or shift")
 
-    if method is None:
+    if ci_method is None:
         # only apply mean shift to the intervals
-        df_res[lower_col] = df[lower_col] - df[pred_col] + mean_pred
-        df_res[upper_col] = df[upper_col] - df[pred_col] + mean_pred
         log.info(
             f"method=None, no further adjustment to the intervals, only mean shift",
         )
-    elif method == "scale":
+    elif ci_method == "scale":
         log.info(
-            f"method={method}, scale the interval length to the target quantile {q}"
-            f" using quantile_adjust_cols={quantile_adjust_cols} with"
+            f"method={ci_method}, scale the interval length to the target quantile {ci}"
+            f" using quantile_adjust_cols={ci_adjust_cols} with"
             " `calibrate_index` individuals",
         )
         df_calibrate["tmp_scale"] = np.abs(
-            df_calibrate[true_col] - mean_model.fittedvalues
-        ) / ((df_calibrate[upper_col] - df_calibrate[lower_col]) / 2)
+            df_calibrate[y_col] - mean_model.fittedvalues
+        ) / (df_calibrate[predstd_col] * ci_z)
 
-        interval_len = (df[upper_col] - df[lower_col]) / 2
-        if len(quantile_adjust_cols) > 0:
+        interval_len = df_raw[predstd_col] * ci_z
+        if len(ci_adjust_cols) > 0:
+            # fit a quantile regression model
             quantreg_model = smf.quantreg(
-                "tmp_scale ~ 1 + " + "+".join([col for col in quantile_adjust_cols]),
+                "tmp_scale ~ 1 + " + "+".join([col for col in ci_adjust_cols]),
                 df_calibrate,
-            ).fit(q=(1 - q * 2))
+            ).fit(q=ci)
 
-            df["tmp_fitted_scale"] = quantreg_model.params["Intercept"]
-            for col in quantile_adjust_cols:
-                df["tmp_fitted_scale"] += quantreg_model.params[col] * df[col]
+            df_raw["tmp_fitted_scale"] = quantreg_model.params["Intercept"]
+            for col in ci_adjust_cols:
+                df_raw["tmp_fitted_scale"] += quantreg_model.params[col] * df_raw[col]
 
-            df_res[lower_col] = mean_pred - interval_len * df["tmp_fitted_scale"]
-            df_res[upper_col] = mean_pred + interval_len * df["tmp_fitted_scale"]
+            df_res[predstd_col] = df_raw[predstd_col] * df_raw["tmp_fitted_scale"]
         else:
+            # no variable to fit for quantile regression model
             cal_scale = np.quantile(
-                np.abs(df_calibrate[true_col] - mean_model.fittedvalues)
-                / ((df_calibrate[upper_col] - df_calibrate[lower_col]) / 2),
-                1 - q * 2,
+                np.abs(df_calibrate[y_col] - mean_model.fittedvalues)
+                / (df_calibrate[predstd_col] * ci_z),
+                ci,
             )
-            df_res[lower_col] = mean_pred - interval_len * cal_scale
-            df_res[upper_col] = mean_pred + interval_len * cal_scale
+            df_res[predstd_col] = df_raw[predstd_col] * cal_scale
 
-    elif method == "shift":
+    elif ci_method == "shift":
         log.info(
-            f"method={method}, expand the interval to the target quantile {q}"
-            f" using quantile_adjust_cols={quantile_adjust_cols} with"
+            f"method={ci_method}, expand the interval to the target quantile {ci}"
+            f" using quantile_adjust_cols={ci_adjust_cols} with"
             " `calibrate_index` individuals",
         )
-        upper = mean_model.fittedvalues + (
-            df_calibrate[upper_col] - df_calibrate[pred_col]
-        )
-        lower = mean_model.fittedvalues - (
-            df_calibrate[pred_col] - df_calibrate[lower_col]
-        )
+        upper = mean_model.fittedvalues + df_calibrate[predstd_col] * ci_z
+        lower = mean_model.fittedvalues - df_calibrate[predstd_col] * ci_z
         df_calibrate["tmp_shift"] = np.maximum(
-            lower - df_calibrate[true_col], df_calibrate[true_col] - upper
+            lower - df_calibrate[y_col], df_calibrate[y_col] - upper
         )
-
-        if len(quantile_adjust_cols) > 0:
+        if len(ci_adjust_cols) > 0:
             quantreg_model = smf.quantreg(
-                "tmp_shift ~ 1 + " + "+".join([col for col in quantile_adjust_cols]),
+                "tmp_shift ~ 1 + " + "+".join([col for col in ci_adjust_cols]),
                 df_calibrate,
-            ).fit(q=(1 - q * 2))
+            ).fit(q=ci)
 
-            df["tmp_fitted_shift"] = quantreg_model.params["Intercept"]
-            for col in quantile_adjust_cols:
-                df["tmp_fitted_shift"] += quantreg_model.params[col] * df[col]
+            df_raw["tmp_fitted_shift"] = quantreg_model.params["Intercept"]
+            for col in ci_adjust_cols:
+                df_raw["tmp_fitted_shift"] += quantreg_model.params[col] * df_raw[col]
 
-            df_res[lower_col] = (
-                mean_pred - (df[pred_col] - df[lower_col]) - df["tmp_fitted_shift"]
-            )
-
-            df_res[upper_col] = (
-                mean_pred + (df[upper_col] - df[pred_col]) + df["tmp_fitted_shift"]
-            )
+            df_res[predstd_col] = (
+                df_raw[predstd_col] * ci_z + df_raw["tmp_fitted_shift"]
+            ) / ci_z
         else:
-            cal_shift = np.quantile(df_calibrate["tmp_shift"], 1 - q * 2)
-            df_res[lower_col] = mean_pred - (df[pred_col] - df[lower_col]) - cal_shift
-            df_res[upper_col] = mean_pred + (df[upper_col] - df[pred_col]) + cal_shift
-
+            cal_shift = np.quantile(df_calibrate["tmp_shift"], ci)
+            df_res[predstd_col] = (df_raw[predstd_col] * ci_z + cal_shift) / ci_z
     return df_res
