@@ -2,9 +2,59 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
+import statsmodels.stats.api as sms
 import warnings
 from typing import List
 import structlog
+import statsmodels.api as sm
+
+
+def test_het_breuschpagan(
+    df: pd.DataFrame,
+    y_col: str,
+    pred_col: str,
+    test_col: str,
+    control_cols: List[str] = None,
+):
+    """
+    Test whether a specific covariate influence the predictivity of PRS.
+    Using Breusch Pagan test.
+
+    First a model of y ~ pred + test + control
+    Then test resid ~ test (resid obtained from the first model)
+
+
+    Parameters
+    ----------
+    df: pd.DataFrame
+        data frame containing all the information
+    y_col: str
+        column containing response variable
+    pred_col: str
+        column containing the mean prediction variable
+    test_col: str
+        column containing the variable of interest
+    control_cols: str
+        column(s) containing the the control variables (put into the covariates when performing the control)
+        intercept column (all `1') is assumed NOT in the `control_cols`
+
+    Returns
+    -------
+    pd.Series
+        containing p-value, etc.
+    """
+    # Fit regression model (using the natural log of one of the regressors)
+    y, pred, test = df[y_col], df[[pred_col]], df[[test_col]]
+    if control_cols is None:
+        control = pd.DataFrame(np.ones((len(df), 1)), columns=["const"], index=df.index)
+    else:
+        control = sm.add_constant(df[control_cols])
+    model = sm.OLS(endog=y, exog=pd.concat([pred, test, control], axis=1)).fit()
+
+    names = ["Lagrange multiplier statistic", "p-value", "f-value", "f p-value"]
+    # exog_het must always contain a constant
+    het_test = sms.het_breuschpagan(resid=model.resid, exog_het=sm.add_constant(test))
+    return pd.Series(index=names, data=het_test)
 
 
 def calibrate_pred(
