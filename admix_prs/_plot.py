@@ -15,9 +15,9 @@ def uct_plot(pred_mean, pred_std, y, x):
     lim1 = min(min(pred_mean), min(y))
     lim2 = max(max(pred_mean), max(y))
     # expand limits by 10%
-    lim1, lim2 = (lim1 + lim2) / 2 - (lim2 - lim1) * 0.6, (lim1 + lim2) / 2 + (
+    lim1, lim2 = (lim1 + lim2) / 2 - (lim2 - lim1) * 0.55, (lim1 + lim2) / 2 + (
         lim2 - lim1
-    ) * 0.6
+    ) * 0.55
 
     sns.regplot(x=pred_mean, y=y, ax=axes[1], scatter=False)
     plt.setp(axes[1].collections[1], alpha=0.6)
@@ -53,8 +53,8 @@ def uct_plot(pred_mean, pred_std, y, x):
 def plot_calibration(
     df: pd.DataFrame,
     y_col: str,
-    lower_col: str,
-    upper_col: str,
+    pred_col: str,
+    predstd_col: str,
     group_col=None,
     ax=None,
     jitter=0.3,
@@ -77,8 +77,8 @@ def plot_calibration(
         df_group = df_group.sample(n=n, random_state=random_state)
 
         x = i + np.linspace(-0.5, 0.5, len(df_group)) * jitter
-        ymean = (df_group[upper_col] + df_group[lower_col]) / 2
-        yerr = (df_group[upper_col] - df_group[lower_col]) / 2
+        ymean = df_group[pred_col]
+        yerr = df_group[predstd_col]
 
         eb = ax.errorbar(
             x=x, y=ymean, yerr=yerr, fmt="none", capsize=0, lw=1.0, color="gray"

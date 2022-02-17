@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 import uncertainty_toolbox as uct
 
 
-
 def uct_metrics(pred_mean, pred_std, y):
 
     # Compute all uncertainty metrics
@@ -62,10 +61,14 @@ def evaluate(
             .mean()
         )
         length = df_grouped.apply(lambda df: (df[predstd_col] * ci_z).mean())
+        y_std = df_grouped.apply(lambda df: df[y_col].std())
+        pred_std = df_grouped.apply(lambda df: df[pred_col].std())
         df = {
             "r2": r2,
             "coverage": coverage,
             "length": length,
+            "y_std": y_std,
+            "pred_std": pred_std,
         }
         return pd.DataFrame(data=df)
     else:
@@ -79,9 +82,13 @@ def evaluate(
             .mean()
         )
         length = (df[predstd_col] * ci_z).mean()
+        y_std = df[y_col].std()
+        pred_std = df[pred_col].std()
         df = {
             "r2": r2,
             "coverage": coverage,
             "length": length,
+            "y_std": y_std,
+            "pred_std": pred_std,
         }
         return pd.Series(data=df)
