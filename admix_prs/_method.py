@@ -160,6 +160,7 @@ def calibrate_pred(
     ci_method: str = None,
     mean_adjust_cols: List[str] = None,
     ci_adjust_cols: List[str] = None,
+    verbose: bool = False,
 ):
     """
     Perform calibration:
@@ -216,11 +217,12 @@ def calibrate_pred(
     mean_pred = mean_model.predict(
         sm.add_constant(df_raw[[pred_col] + mean_adjust_cols])
     )
-    log.info(
-        f"Regress pred_col={pred_col} against "
-        f"mean_adjust_cols={mean_adjust_cols} fitted with `calibrate_index` individuals",
-    )
-    log.info(f"mean_model.summary(): {mean_model.summary()}")
+    if verbose:
+        log.info(
+            f"Regress pred_col={pred_col} against "
+            f"mean_adjust_cols={mean_adjust_cols} fitted with `calibrate_index` individuals",
+        )
+        log.info(f"mean_model.summary(): {mean_model.summary()}")
 
     # step 2:
     df_res = pd.DataFrame(
@@ -239,15 +241,17 @@ def calibrate_pred(
 
     if ci_method is None:
         # only apply mean shift to the intervals
-        log.info(
-            f"method=None, no further adjustment to the intervals, only mean shift",
-        )
+        if verbose:
+            log.info(
+                f"method=None, no further adjustment to the intervals, only mean shift",
+            )
     elif ci_method == "scale":
-        log.info(
-            f"method={ci_method}, scale the interval length to the target quantile {ci}"
-            f" using quantile_adjust_cols={ci_adjust_cols} with"
-            " `calibrate_index` individuals",
-        )
+        if verbose:
+            log.info(
+                f"method={ci_method}, scale the interval length to the target quantile {ci}"
+                f" using quantile_adjust_cols={ci_adjust_cols} with"
+                " `calibrate_index` individuals",
+            )
         df_calibrate["tmp_scale"] = np.abs(
             df_calibrate[y_col] - mean_model.fittedvalues
         ) / (df_calibrate[predstd_col] * ci_z)
@@ -275,11 +279,12 @@ def calibrate_pred(
             df_res[predstd_col] = df_raw[predstd_col] * cal_scale
 
     elif ci_method == "shift":
-        log.info(
-            f"method={ci_method}, expand the interval to the target quantile {ci}"
-            f" using quantile_adjust_cols={ci_adjust_cols} with"
-            " `calibrate_index` individuals",
-        )
+        if verbose:
+            log.info(
+                f"method={ci_method}, expand the interval to the target quantile {ci}"
+                f" using quantile_adjust_cols={ci_adjust_cols} with"
+                " `calibrate_index` individuals",
+            )
         upper = mean_model.fittedvalues + df_calibrate[predstd_col] * ci_z
         lower = mean_model.fittedvalues - df_calibrate[predstd_col] * ci_z
         df_calibrate["tmp_shift"] = np.maximum(
