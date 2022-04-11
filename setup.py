@@ -16,4 +16,5 @@ setup(
     author_email="kangchenghou@gmail.com",
     packages=["calprs"],
     setup_requires=["numpy>=1.10"],
+    entry_points={"console_scripts": ["calprs=calprs._cli:cli"]},
 )

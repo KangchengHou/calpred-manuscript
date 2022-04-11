@@ -5,10 +5,23 @@ To install the package,
 pip install -e .
 ```
 
-To use the package (for example),
-```python
-import calprs
-?calprs.calibrate_prs
+## CLI for using the package
+```bash
+toy=tests/test-data/toy.tsv
+calprs r2diff \
+    --df ${toy} \
+    --y y_cov \
+    --pred prs \
+    --group age \
+    --out out
+```
+
+```bash
+calprs model \
+    --df <df_path> \
+    --y <response variable> \
+    --pred
+    --out <model_path>
 ```
 
 We take input of PRS point estimate (mean), as well as the \alpha-level credible interval (lower-ci, upper-ci), in addition to a set of individuals used to perform the calibration. We aim to produce a tight and calibrated prediction interval.
