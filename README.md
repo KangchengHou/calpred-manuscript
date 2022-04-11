@@ -1,4 +1,4 @@
-# admix-prs-uncertainty
+# calprs (Calibrated PRS)
 
 To install the package,
 ```bash
@@ -7,8 +7,8 @@ pip install -e .
 
 To use the package (for example),
 ```python
-import admix_prs
-?admix_prs.calibrate_prs
+import calprs
+?calprs.calibrate_prs
 ```
 ## File structures
 
