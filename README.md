@@ -1,4 +1,4 @@
-# admix-prs-uncertainty
+# calprs (Calibrated PRS)
 
 To install the package,
 ```bash
@@ -7,8 +7,8 @@ pip install -e .
 
 To use the package (for example),
 ```python
-import admix_prs
-?admix_prs.calibrate_prs
+import calprs
+?calprs.calibrate_prs
 ```
 
 We take input of PRS point estimate (mean), as well as the \alpha-level credible interval (lower-ci, upper-ci), in addition to a set of individuals used to perform the calibration. We aim to produce a tight and calibrated prediction interval.
