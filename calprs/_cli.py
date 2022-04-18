@@ -14,7 +14,7 @@ def log_params(name, params):
     )
 
 
-def r2diff(df: str, y: str, pred: str, group: Union[str, List[str]], out: str):
+def r2diff(df: str, y: str, pred: str, group: str, out: str, n_bootstrap: int = 1000):
     """
     Calculate the difference between the r2 between `y` and `pred` across groups of
     individuals.
@@ -31,7 +31,10 @@ def r2diff(df: str, y: str, pred: str, group: Union[str, List[str]], out: str):
         Name of the column containing the group variable.
     out : str
         Path to the output file.
+    n_bootstrap : int
+        Number of bootstraps to perform, default 1000.
     """
+    
     df = pd.read_csv(df, sep='\t', index_col=0)
     
     out_li = []
