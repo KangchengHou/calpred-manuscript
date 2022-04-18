@@ -14,7 +14,7 @@ def log_params(name, params):
     )
 
 
-def r2diff(df: str, y: str, pred: str, group: Union[str, List[str]], out: str):
+def r2diff(df: str, y: str, pred: str, group: str, out: str, n_bootstrap: int = 1000):
     """
     Calculate the difference between the r2 between `y` and `pred` across groups of
     individuals.
@@ -31,10 +31,34 @@ def r2diff(df: str, y: str, pred: str, group: Union[str, List[str]], out: str):
         Name of the column containing the group variable.
     out : str
         Path to the output file.
+    n_bootstrap : int
+        Number of bootstraps to perform, default 1000.
     """
-    log_params("r2diff", locals())
+    
     df = pd.read_csv(df, sep='\t', index_col=0)
-    print(df)
+    if isinstance(group, str):
+        group = [group]
+    
+    out_list = []
+    for col in group: 
+        n_unique = len(np.unique(df[col].values))
+        if n_unique > 5:
+            df[col] = pd.qcut(df[col], q=5, duplicates="drop").cat.codes
+            print(f"Converting column '{col}' to 5 quintiles")
+        df_res, df_res_se, r2_diff = admix_prs.summarize_pred(
+            df,
+            y_col=y,
+            pred_col=pred,
+            group_col=col,
+            n_bootstrap=n_bootstrap,
+            return_r2_diff=True,
+        )
+        out_list.append(
+            [col, df_res["r2"].iloc[-1] - df_res["r2"].iloc[0], np.mean(r2_diff > 0)]
+        )
+
+    df_out = pd.DataFrame(out_list, columns=["group", "r2diff", "prob>0"])     
+    df_out.to_csv(out, sep='\t', index=False)
 
 
 def model(
