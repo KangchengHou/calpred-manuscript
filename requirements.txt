@@ -9,5 +9,4 @@ statsmodels
 fire
 structlog
 git+https://github.com/KangchengHou/dask-pgen.git#egg=dask-pgen
-git+https://github.com/KangchengHou/admix-kit.git#egg=admix-kit
 git+https://github.com/uncertainty-toolbox/uncertainty-toolbox
