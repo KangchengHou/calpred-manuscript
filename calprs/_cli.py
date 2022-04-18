@@ -36,44 +36,28 @@ def r2diff(df: str, y: str, pred: str, group: str, out: str, n_bootstrap: int = 
     """
     
     df = pd.read_csv(df, sep='\t', index_col=0)
-    flag_li = isinstance(group, list)
+    if isinstance(group, str):
+        group = [group]
     
-    out_li = []
-    if flag_li:
-        for col in group:
-            n_unique = len(np.unique(df[col].values))
-            if n_unique > 5:
-                df[col] = pd.qcut(df[col], q=5, duplicates="drop").cat.codes
-                print(f"Converting column '{col}' to 5 quintiles")
-            df_res, df_res_se, r2_diff = admix_prs.summarize_pred(
-                df,
-                y_col=y,
-                pred_col=pred,
-                group_col=col,
-                n_bootstrap=n_bootstrap,
-                return_r2_diff=True,
-            )
-            out_li.append(
-                [col, df_res["r2"].iloc[-1] - df_res["r2"].iloc[0], np.mean(r2_diff > 0)]
-            )
-    else: 
-        n_unique = len(np.unique(df[group].values))
+    out_list = []
+    for col in group: 
+        n_unique = len(np.unique(df[col].values))
         if n_unique > 5:
-            df[group] = pd.qcut(df[group], q=5, duplicates="drop").cat.codes
-            print(f"Converting column '{group}' to 5 quintiles")
+            df[col] = pd.qcut(df[col], q=5, duplicates="drop").cat.codes
+            print(f"Converting column '{col}' to 5 quintiles")
         df_res, df_res_se, r2_diff = admix_prs.summarize_pred(
             df,
             y_col=y,
             pred_col=pred,
-            group_col=group,
+            group_col=col,
             n_bootstrap=n_bootstrap,
             return_r2_diff=True,
         )
-        out_li.append(
-            [group, df_res["r2"].iloc[-1] - df_res["r2"].iloc[0], np.mean(r2_diff > 0)]
+        out_list.append(
+            [col, df_res["r2"].iloc[-1] - df_res["r2"].iloc[0], np.mean(r2_diff > 0)]
         )
 
-    df_out = pd.DataFrame(out_li, columns=["group", "r2diff", "prob>0"])     
+    df_out = pd.DataFrame(out_list, columns=["group", "r2diff", "prob>0"])     
     df_out.to_csv(out, sep='\t', index=False)
 
 
