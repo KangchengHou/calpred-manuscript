@@ -34,6 +34,6 @@ The pipeline goes as follows:
     (a)
 ## File structures
 
-- `admix_prs/`: source code
+- `calprs/`: source code
 - `notebooks/`: example analysis.
 - `experiments/`: code to replicate all main figures.
