@@ -2,10 +2,12 @@
 
 To install the package,
 ```bash
+git clone git@github.com:KangchengHou/calprs.git && cd calprs
 pip install -e .
 ```
 
 ## CLI for using the package
+Comparing difference R2 between PRS and phenotype across individual groups.
 ```bash
 toy=tests/test-data/toy.tsv
 calprs r2diff \
@@ -32,6 +34,6 @@ The pipeline goes as follows:
     (a)
 ## File structures
 
-- `admix_prs/`: source code
+- `calprs/`: source code
 - `notebooks/`: example analysis.
 - `experiments/`: code to replicate all main figures.

@@ -6,6 +6,16 @@ from tqdm import tqdm
 from typing import List
 
 
+def get_data_folder():
+    """
+    Path to the folder containing example files.
+    """
+    import os
+
+    p = os.path.dirname(__import__("calprs").__path__[0])
+    return os.path.join(p, "tests", "test-data")
+
+
 def plink2_assoc_to_ldpred2(plink2_assoc_path):
     assoc = pd.read_csv(plink2_assoc_path, delim_whitespace=True)
     assert np.all(assoc["A1"] == assoc["ALT"])
