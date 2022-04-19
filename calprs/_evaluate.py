@@ -34,8 +34,7 @@ def summarize_pred(
     Parameters
     ----------
     df : pandas.DataFrame
-        Dataframe containing the data, must have columns `true_col`, `lower_col`,
-        `upper_col`, and `group_col`.
+        Dataframe containing the data, must have columns `y_col`, `pred_col`
     y_col : str
         Name of the column containing the true value.
     pred_col : str
@@ -53,6 +52,15 @@ def summarize_pred(
         Dataframe with n_level rows and three columns `group_col`, `r2`, `coverage`,
         and `interval_length`
     """
+    val_cols = [y_col, pred_col]
+    if group_col is not None:
+        val_cols.append(group_col)
+    if predstd_col is not None:
+        val_cols.append(predstd_col)
+
+    # dropping rows with missing values
+    df = df[val_cols].dropna()
+
     ci_z = stats.norm.ppf((1 + ci) / 2)
     if group_col is not None:
         df_grouped = df.groupby(group_col)

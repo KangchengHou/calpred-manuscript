@@ -53,10 +53,10 @@ def r2diff(
 
     out_list = []
     for col in group:
-        n_unique = len(np.unique(df[col].values))
+        n_unique = len(np.unique(df[col].dropna().values))
         if n_unique > 5:
-            df[col] = pd.qcut(df[col], q=5, duplicates="drop").cat.codes
             logger.info(f"Converting column '{col}' to 5 quintiles")
+            df[col] = pd.qcut(df[col], q=5, duplicates="drop").cat.codes
         df_res, df_res_se, r2_diff = summarize_pred(
             df,
             y_col=y,
