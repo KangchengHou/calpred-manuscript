@@ -2,13 +2,13 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
-import statsmodels.stats.api as sms
+from statsmodels.regression.quantile_regression import QuantReg
+
 import warnings
-from typing import List
+from typing import List, Dict
 import structlog
-import statsmodels.api as sm
-import matplotlib.pyplot as plt
 from scipy import stats
+import matplotlib.pyplot as plt
 
 
 def het_breuschpagan(resid, exog_het, robust=True):
@@ -256,7 +256,6 @@ def calibrate_pred(
             df_calibrate[y_col] - mean_model.fittedvalues
         ) / (df_calibrate[predstd_col] * ci_z)
 
-        interval_len = df_raw[predstd_col] * ci_z
         if len(ci_adjust_cols) > 0:
             # fit a quantile regression model
             quantreg_model = smf.quantreg(
@@ -307,3 +306,212 @@ def calibrate_pred(
             cal_shift = np.quantile(df_calibrate["tmp_shift"], ci)
             df_res[predstd_col] = (df_raw[predstd_col] * ci_z + cal_shift) / ci_z
     return df_res
+
+
+def calibrate_model(
+    y: np.ndarray,
+    pred: np.ndarray,
+    predstd: np.ndarray,
+    ci: float = 0.9,
+    ci_method: str = None,
+    mean_adjust_vars: np.ndarray = None,
+    ci_adjust_vars: np.ndarray = None,
+) -> Dict:
+    """
+    Perform calibration:
+    Step 1: fit <pheno_col> ~ <pred_col> + intercept + age + sex + 10PCs
+    Step 2: Use <lower_col> and <upper_col> interval as seed interval
+    Step 3: try scaling or addition
+
+    Note: NaN values are not allowed in any of the passed data.
+
+    Parameters
+    ---------
+    y: np.ndarray
+        1d array of phenotype
+    pred: np.ndarray
+        1d array of predicted values
+    predstd: np.ndarray
+        1d array of prediction standard deviation
+    mean_adjust_vars: np.ndarray
+        2d array of variables to be used for mean adjustment (columns corresponds to
+        variables)
+    ci_adjust_vars: np.ndarray
+        2d array of variables to be used for ci adjustment (columns corresponds to
+        variables)
+    ci: float
+        target confidence interval, default 0.9, <lower_col> and <upper_col> will be used for
+        calibration
+    ci_method: str
+        method for calibration, "scale" or "shift"
+
+    Returns
+    -------
+    model: Dict
+        mean_model: model
+            model to adjust for the mean
+        ci_method: str
+            method used for calibration, one of None, "scale" or "shift"
+        ci_model: float, model
+            model to adjust for the confidence interval, None if ci_method is None
+            Can be a float, then the adjustment is done the same across individuals.
+            Can be a model, then the adjustment is done according to the covariate.
+
+    """
+    y, pred, predstd = np.array(y), np.array(pred), np.array(predstd)
+    # resulting calibration model
+    result_model = dict()
+    ci_z = stats.norm.ppf((1 + ci) / 2)
+
+    result_model["ci"] = ci
+    result_model["ci_z"] = ci_z
+
+    n_indiv = len(y)
+    assert (len(pred) == n_indiv) & (
+        len(predstd) == n_indiv
+    ), "y, pred, predstd must have the same length (number of individuals)"
+
+    # Step 1: fit <pheno_col> ~ <pred_col> + intercept + age +
+    if mean_adjust_vars is None:
+        mean_adjust_vars = np.zeros([n_indiv, 0])
+
+    if ci_adjust_vars is None:
+        ci_adjust_vars = np.zeros([n_indiv, 0])
+
+    # step 1: build prediction model with pheno ~ pred_col + mean_adjust_cols + ...
+    mean_model = sm.OLS(
+        y,
+        sm.add_constant(np.hstack([pred.reshape(-1, 1), mean_adjust_vars])),
+    ).fit()
+    result_model["mean_model"] = mean_model
+    pred = mean_model.fittedvalues
+
+    # step 2: CI calibration
+    if ci_method in ["scale", "shift"]:
+        assert (ci > 0) & (ci < 1), "ci should be between 0 and 1"
+    elif ci_method is None:
+        if ci_adjust_vars.shape[1] > 0:
+            warnings.warn("`ci_adjust_vars` will not be used because `method` is None")
+    else:
+        raise ValueError("method should be either scale or shift")
+
+    if ci_method is None:
+        result_model["ci_method"] = None
+        pass
+    elif ci_method == "scale":
+        result_model["ci_method"] = "scale"
+        scale = np.abs(y - pred) / (predstd * ci_z)
+
+        if ci_adjust_vars.shape[1] > 0:
+            # fit a quantile regression model
+            quantreg_model = QuantReg(
+                endog=scale, exog=sm.add_constant(ci_adjust_vars)
+            ).fit(q=ci)
+            fitted_scale = quantreg_model.fittedvalues
+            predstd *= fitted_scale
+            result_model["ci_model"] = quantreg_model
+        else:
+            # use simple conformal prediction
+            # because no variable to fit for quantile regression model
+            fitted_scale = np.quantile(
+                np.abs(y - pred) / (predstd * ci_z),
+                ci,
+            )
+            predstd *= fitted_scale
+            result_model["ci_model"] = fitted_scale
+
+    elif ci_method == "shift":
+        result_model["ci_method"] = "shift"
+
+        upper = pred + predstd * ci_z
+        lower = pred - predstd * ci_z
+        shift = np.maximum(lower - y, y - upper)
+        if ci_adjust_vars.shape[1] > 0:
+            quantreg_model = QuantReg(
+                endog=shift, exog=sm.add_constant(ci_adjust_vars)
+            ).fit(q=ci)
+            fitted_shift = quantreg_model.fittedvalues
+            predstd = (predstd * ci_z + fitted_shift) / ci_z
+            result_model["ci_model"] = quantreg_model
+
+        else:
+            fitted_shift = np.quantile(shift, ci)
+            # (1) get 90% CI (2) add a shift (3) scale back
+            predstd = (predstd * ci_z + fitted_shift) / ci_z
+            result_model["ci_model"] = fitted_shift
+
+    return result_model
+
+
+def calibrate_adjust(
+    model: Dict,
+    pred: np.ndarray,
+    predstd: np.ndarray,
+    mean_adjust_vars: np.ndarray = None,
+    ci_adjust_vars: np.ndarray = None,
+):
+    """
+    Adjust prediction and prediction standard deviation according to calibration model
+
+    Parameters
+    ---------
+    pred: np.ndarray
+        1d array of predicted values
+    predstd: np.ndarray
+        1d array of prediction standard deviation
+    model: Dict
+        calibration model
+    mean_adjust_vars: np.ndarray
+        2d array of variables to be used for mean adjustment (columns corresponds to
+        variables)
+    ci_adjust_vars: np.ndarray
+        2d array of variables to be used for ci adjustment (columns corresponds to
+        variables)
+
+    Returns
+    -------
+    pred: np.ndarray
+        1d array of predicted values
+    predstd: np.ndarray
+        1d array of prediction standard deviation
+    """
+
+    pred, predstd = np.array(pred), np.array(predstd)
+    n_indiv = len(pred)
+    assert (len(pred) == n_indiv) & (
+        len(predstd) == n_indiv
+    ), "pred, predstd must have the same length (number of individuals)"
+
+    if mean_adjust_vars is None:
+        mean_adjust_vars = np.zeros([n_indiv, 0])
+
+    if ci_adjust_vars is None:
+        ci_adjust_vars = np.zeros([n_indiv, 0])
+
+    # mean adjustment
+    pred = model["mean_model"].predict(
+        sm.add_constant(np.hstack([pred.reshape(-1, 1), mean_adjust_vars]))
+    )
+
+    # ci adjustment
+    if model["ci_method"] is None:
+        return pred, predstd
+    elif model["ci_method"] == "scale":
+        if isinstance(model["ci_model"], float):
+            assert ci_adjust_vars.shape[1] == 0, "ci_adjust_vars should be empty"
+            fitted_scale = model["ci_model"]
+        else:
+            fitted_scale = model["ci_model"].predict(sm.add_constant(ci_adjust_vars))
+        predstd *= fitted_scale
+
+    elif model["ci_method"] == "shift":
+        if isinstance(model["ci_model"], float):
+            assert ci_adjust_vars.shape[1] == 0, "ci_adjust_vars should be empty"
+            fitted_shift = model["ci_model"]
+            # (1) get 90% CI (2) add a shift (3) scale back
+            ci_z = model["ci_z"]
+        else:
+            fitted_shift = model["ci_model"].predict(sm.add_constant(ci_adjust_vars))
+        predstd = (predstd * ci_z + fitted_shift) / ci_z
+
+    return pred, predstd
