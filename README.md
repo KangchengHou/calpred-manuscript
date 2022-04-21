@@ -1,6 +1,6 @@
 # calprs (Calibrated PRS)
 
-To install the package,
+to install the package,
 ```bash
 git clone git@github.com:KangchengHou/calprs.git && cd calprs
 pip install -e .
