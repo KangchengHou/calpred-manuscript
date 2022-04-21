@@ -314,8 +314,8 @@ def calibrate_model(
     predstd: np.ndarray,
     ci: float = 0.9,
     ci_method: str = None,
-    mean_adjust_vars: np.ndarray = None,
-    ci_adjust_vars: np.ndarray = None,
+    mean_adjust_vars: pd.DataFrame = None,
+    ci_adjust_vars: pd.DataFrame = None,
 ) -> Dict:
     """
     Perform calibration:
@@ -374,17 +374,32 @@ def calibrate_model(
     # Step 1: fit <pheno_col> ~ <pred_col> + intercept + age +
     if mean_adjust_vars is None:
         mean_adjust_vars = np.zeros([n_indiv, 0])
+    else:
+        assert isinstance(
+            mean_adjust_vars, pd.DataFrame
+        ), "mean_adjust_vars must be a DataFrame"
 
     if ci_adjust_vars is None:
         ci_adjust_vars = np.zeros([n_indiv, 0])
+    else:
+        assert isinstance(
+            ci_adjust_vars, pd.DataFrame
+        ), "ci_adjust_vars must be a DataFrame"
 
     # step 1: build prediction model with pheno ~ pred_col + mean_adjust_cols + ...
+    mean_design = pd.DataFrame(np.hstack([pred.reshape(-1, 1), mean_adjust_vars]))
+    if mean_adjust_vars.shape[1] == 0:
+        mean_design.columns = ["pred"]
+    else:
+        mean_design.columns = ["pred"] + mean_adjust_vars.columns.tolist()  # type: ignore
+
     mean_model = sm.OLS(
         y,
-        sm.add_constant(np.hstack([pred.reshape(-1, 1), mean_adjust_vars])),
+        sm.add_constant(mean_design),
     ).fit()
+
     result_model["mean_model"] = mean_model
-    pred = mean_model.fittedvalues
+    pred = mean_model.fittedvalues.values
 
     # step 2: CI calibration
     if ci_method in ["scale", "shift"]:
@@ -514,4 +529,6 @@ def calibrate_adjust(
             fitted_shift = model["ci_model"].predict(sm.add_constant(ci_adjust_vars))
         predstd = (predstd * ci_z + fitted_shift) / ci_z
 
+    if isinstance(predstd, pd.Series):
+        predstd = predstd.values
     return pred, predstd
