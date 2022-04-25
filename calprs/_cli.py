@@ -9,6 +9,7 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 import statsmodels.stats.api as sms
 from scipy import stats
+from statsmodels.regression.quantile_regression import QuantReg
 
 
 logger = structlog.get_logger()
@@ -81,7 +82,7 @@ def r2diff(
 
 def model(
     df: str,
-    y: str,
+    y: str, 
     pred: str,
     predstd: str,
     out: str,
@@ -108,111 +109,27 @@ def model(
         calibration
     ci_method: str
         method for calibration, "scale" or "shift"
-    mean_adjust_cols: np.ndarray
-        2d array of variables to be used for mean adjustment (columns corresponds to
+    mean_adjust_colss: List[str]
+        a list of variables to be used for mean adjustment (columns corresponds to
         variables)
-    ci_adjust_cols: np.ndarray
-        2d array of variables to be used for ci adjustment (columns corresponds to
+    ci_adjust_cols: List[str]
+        a list of variables to be used for ci adjustment (columns corresponds to
         variables)
-    out : str
+    out: str
         Path to the output pickle file.
     """
     # inputs
-    df_train = pd.read_csv(df, index_col=0)
-    y_train = df_train[y].values
-    pred_train = df_train[pred].values
-    predstd_train = df_train[predstd].values
-    n_indiv = len(y_train)
-    assert (len(pred_train) == n_indiv) & (
-        len(predstd_train) == n_indiv
-    ), "y, pred, predstd0 must have the same length (number of individuals)"
-    if mean_adjust_vars is None:
-        mean_adjust_vars = np.zeros([n_indiv, 0])
-    else:
-        assert isinstance(
-            mean_adjust_vars, pd.DataFrame
-        ), "mean_adjust_vars must be a DataFrame"
-    if ci_adjust_vars is None:
-        ci_adjust_vars = np.zeros([n_indiv, 0])
-    else:
-        assert isinstance(
-            ci_adjust_vars, pd.DataFrame
-        ), "ci_adjust_vars must be a DataFrame"
+    df_train = pd.read_csv(df, sep= '\t', index_col=0)
     
-    result_model = dict()
-    ci_z = stats.norm.ppf((1 + ci) / 2)
-    result_model["ci"] = ci
-    result_model["ci_z"] = ci_z
-    
-    # step 1: build prediction model with pheno ~ pred_col + mean_adjust_cols + ...
-    mean_design = pd.DataFrame(np.hstack([pred_train.reshape(-1, 1), mean_adjust_vars]))
-    if mean_adjust_vars.shape[1] == 0:
-        mean_design.columns = ["pred"]
-    else:
-        mean_design.columns = ["pred"] + mean_adjust_vars.columns.tolist()  # type: ignore
-
-    mean_model = sm.OLS(
-        y_train,
-        sm.add_constant(mean_design),
-    ).fit()
-
-    result_model["mean_model"] = mean_model
-    pred_train = mean_model.fittedvalues.values
-    
-    # step 2: CI calibration
-    if ci_method in ["scale", "shift"]:
-        assert (ci > 0) & (ci < 1), "ci should be between 0 and 1"
-    elif ci_method is None:
-        if ci_adjust_vars.shape[1] > 0:
-            warnings.warn("`ci_adjust_vars` will not be used because `method` is None")
-    else:
-        raise ValueError("method should be either scale or shift")
-    
-    if ci_method is None:
-        result_model["ci_method"] = None
-        pass
-    
-    elif ci_method == "scale":
-        result_model["ci_method"] = "scale"
-        scale = np.abs(y_train - pred_train) / (predstd_train * ci_z)
-
-        if ci_adjust_vars.shape[1] > 0:
-            # fit a quantile regression model
-            quantreg_model = QuantReg(
-                endog=scale, exog=sm.add_constant(ci_adjust_vars)
-            ).fit(q=ci)
-            fitted_scale = quantreg_model.fittedvalues
-            predstd_train *= fitted_scale
-            result_model["ci_model"] = quantreg_model
-        else:
-            # use simple conformal prediction
-            # because no variable to fit for quantile regression model
-            fitted_scale = np.quantile(
-                np.abs(y_train - pred_train) / (predstd_train * ci_z),
-                ci,
-            )
-            predstd_train *= fitted_scale
-            result_model["ci_model"] = fitted_scale
-            
-    elif ci_method == "shift":
-        result_model["ci_method"] = "shift"
-
-        upper = pred_train + predstd_train * ci_z
-        lower = pred_train - predstd_train * ci_z
-        shift = np.maximum(lower - y_train, y_train - upper)
-        if ci_adjust_vars.shape[1] > 0:
-            quantreg_model = QuantReg(
-                endog=shift, exog=sm.add_constant(ci_adjust_vars)
-            ).fit(q=ci)
-            fitted_shift = quantreg_model.fittedvalues
-            predstd_train = (predstd_train * ci_z + fitted_shift) / ci_z
-            result_model["ci_model"] = quantreg_model
-
-        else:
-            fitted_shift = np.quantile(shift, ci)
-            # (1) get 90% CI (2) add a shift (3) scale back
-            predstd_train = (predstd_train * ci_z + fitted_shift) / ci_z
-            result_model["ci_model"] = fitted_shift
+    result_model = calprs.calibrate_model(
+        y=df_train[y].values,
+        pred=df_train[pred].values,
+        predstd=df_train[predstd].values,
+        ci=ci,
+        ci_method="scale",
+        mean_adjust_vars=mean_adjust_vars,
+        ci_adjust_vars=ci_adjust_vars,
+    )
             
     pickle_out = open(out, "wb")
     pickle.dump(result_model, pickle_out)
@@ -242,60 +159,26 @@ def calibrate(
         Name of the column containing the initial predicted standard deviation. 
     out : str
         Path to the output file.
-    mean_adjust_cols: np.ndarray
-        2d array of variables to be used for mean adjustment (columns corresponds to
+    mean_adjust_cols: List[str]
+        a list of variables to be used for mean adjustment (columns corresponds to
         variables)
-    ci_adjust_cols: np.ndarray
-        2d array of variables to be used for ci adjustment (columns corresponds to
+    ci_adjust_cols: List[str]
+        a list of variables to be used for ci adjustment (columns corresponds to
         variables)
     """
     # inputs
     pickle_in = open(model, "rb")
     model = pickle.load(pickle_in)
-    df_test = pd.read_csv(df, index_col=0)
-    pred_test = df_test[pred].values
-    predstd_test = df_test[predstd].values
-    n_indiv = len(pred_test)
-    assert (len(pred_test) == n_indiv) & (
-        len(predstd_test) == n_indiv
-    ), "pred, predstd must have the same length (number of individuals)"
-
-    if mean_adjust_vars is None:
-        mean_adjust_vars = np.zeros([n_indiv, 0])
-
-    if ci_adjust_vars is None:
-        ci_adjust_vars = np.zeros([n_indiv, 0])
+    df_test = pd.read_csv(df, sep='\t', index_col=0)
     
-    # mean adjustment
-    pred_test = model["mean_model"].predict(
-        sm.add_constant(np.hstack([pred_test.reshape(-1, 1), mean_adjust_vars]))
+    df_test["cal_prs"], df_test["cal_predstd"] = calprs.calibrate_adjust(
+        model=model,
+        pred=df_test[pred].values,
+        predstd=df_test[predstd].values,
+        mean_adjust_vars=mean_adjust_vars,
+        ci_adjust_vars=ci_adjust_vars,
     )
-    
-    # ci adjustment
-    if model["ci_method"] is None:
-        return pred_test, predstd_test
-    elif model["ci_method"] == "scale":
-        if isinstance(model["ci_model"], float):
-            assert ci_adjust_vars.shape[1] == 0, "ci_adjust_vars should be empty"
-            fitted_scale = model["ci_model"]
-        else:
-            fitted_scale = model["ci_model"].predict(sm.add_constant(ci_adjust_vars))
-        predstd_test *= fitted_scale
-
-    elif model["ci_method"] == "shift":
-        if isinstance(model["ci_model"], float):
-            assert ci_adjust_vars.shape[1] == 0, "ci_adjust_vars should be empty"
-            fitted_shift = model["ci_model"]
-            # (1) get 90% CI (2) add a shift (3) scale back
-            ci_z = model["ci_z"]
-        else:
-            fitted_shift = model["ci_model"].predict(sm.add_constant(ci_adjust_vars))
-        predstd_test = (predstd_test * ci_z + fitted_shift) / ci_z
-    
-    if isinstance(predstd_test, pd.Series):
-        predstd_test = predstd_test.values
-    df_test["cal_prs"], df_test["cal_predstd"] = pred_test, predstd_test
-    df_test.to_csv(out, index=False)
+    df_test.to_csv(out, sep='\t', index=False)
 
 
 

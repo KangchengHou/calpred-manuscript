@@ -314,8 +314,8 @@ def calibrate_model(
     predstd: np.ndarray,
     ci: float = 0.9,
     ci_method: str = None,
-    mean_adjust_vars: pd.DataFrame = None,
-    ci_adjust_vars: pd.DataFrame = None,
+    mean_adjust_vars: List[str] = None,
+    ci_adjust_vars: List[str] = None,
 ) -> Dict:
     """
     Perform calibration:
@@ -375,16 +375,15 @@ def calibrate_model(
     if mean_adjust_vars is None:
         mean_adjust_vars = np.zeros([n_indiv, 0])
     else:
-        assert isinstance(
-            mean_adjust_vars, pd.DataFrame
-        ), "mean_adjust_vars must be a DataFrame"
-
+        if isinstance(mean_adjust_vars, str):
+            mean_adjust_vars = [mean_adjust_vars]
+        mean_adjust_vars = df_train[mean_adjust_vars]
     if ci_adjust_vars is None:
         ci_adjust_vars = np.zeros([n_indiv, 0])
     else:
-        assert isinstance(
-            ci_adjust_vars, pd.DataFrame
-        ), "ci_adjust_vars must be a DataFrame"
+        if isinstance(ci_adjust_vars, str):
+            ci_adjust_vars = [ci_adjust_vars]
+        ci_adjust_vars = df_train[ci_adjust_vars]
 
     # step 1: build prediction model with pheno ~ pred_col + mean_adjust_cols + ...
     mean_design = pd.DataFrame(np.hstack([pred.reshape(-1, 1), mean_adjust_vars]))
@@ -499,9 +498,16 @@ def calibrate_adjust(
 
     if mean_adjust_vars is None:
         mean_adjust_vars = np.zeros([n_indiv, 0])
-
+    else:
+        if isinstance(mean_adjust_vars, str):
+            mean_adjust_vars = [mean_adjust_vars]
+        mean_adjust_vars = df_train[mean_adjust_vars]
     if ci_adjust_vars is None:
         ci_adjust_vars = np.zeros([n_indiv, 0])
+    else:
+        if isinstance(ci_adjust_vars, str):
+            ci_adjust_vars = [ci_adjust_vars]
+        ci_adjust_vars = df_train[ci_adjust_vars]
 
     # mean adjustment
     pred = model["mean_model"].predict(
