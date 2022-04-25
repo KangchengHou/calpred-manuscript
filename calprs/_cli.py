@@ -10,6 +10,7 @@ import statsmodels.formula.api as smf
 import statsmodels.stats.api as sms
 from scipy import stats
 from statsmodels.regression.quantile_regression import QuantReg
+import calprs
 
 
 logger = structlog.get_logger()
