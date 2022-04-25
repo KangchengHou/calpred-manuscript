@@ -120,6 +120,19 @@ def model(
     """
     # inputs
     df_train = pd.read_csv(df, sep= '\t', index_col=0)
+
+    if mean_adjust_vars is None:
+        mean_adjust_vars = np.zeros([n_indiv, 0])
+    else:
+        if isinstance(mean_adjust_vars, str):
+            mean_adjust_vars = [mean_adjust_vars]
+        mean_adjust_vars = df_train[mean_adjust_vars]
+    if ci_adjust_vars is None:
+        ci_adjust_vars = np.zeros([n_indiv, 0])
+    else:
+        if isinstance(ci_adjust_vars, str):
+            ci_adjust_vars = [ci_adjust_vars]
+        ci_adjust_vars = df_train[ci_adjust_vars]
     
     result_model = calprs.calibrate_model(
         y=df_train[y].values,
@@ -170,6 +183,19 @@ def calibrate(
     pickle_in = open(model, "rb")
     model = pickle.load(pickle_in)
     df_test = pd.read_csv(df, sep='\t', index_col=0)
+    
+    if mean_adjust_vars is None:
+        mean_adjust_vars = np.zeros([n_indiv, 0])
+    else:
+        if isinstance(mean_adjust_vars, str):
+            mean_adjust_vars = [mean_adjust_vars]
+        mean_adjust_vars = df_test[mean_adjust_vars]
+    if ci_adjust_vars is None:
+        ci_adjust_vars = np.zeros([n_indiv, 0])
+    else:
+        if isinstance(ci_adjust_vars, str):
+            ci_adjust_vars = [ci_adjust_vars]
+        ci_adjust_vars = df_test[ci_adjust_vars]
     
     df_test["cal_prs"], df_test["cal_predstd"] = calprs.calibrate_adjust(
         model=model,

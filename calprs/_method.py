@@ -370,21 +370,21 @@ def calibrate_model(
     assert (len(pred) == n_indiv) & (
         len(predstd) == n_indiv
     ), "y, pred, predstd must have the same length (number of individuals)"
-
-    # Step 1: fit <pheno_col> ~ <pred_col> + intercept + age +
+    
     if mean_adjust_vars is None:
         mean_adjust_vars = np.zeros([n_indiv, 0])
     else:
-        if isinstance(mean_adjust_vars, str):
-            mean_adjust_vars = [mean_adjust_vars]
-        mean_adjust_vars = df_train[mean_adjust_vars]
+        assert isinstance(
+            mean_adjust_vars, pd.DataFrame
+        ), "mean_adjust_vars must be a DataFrame"
+
     if ci_adjust_vars is None:
         ci_adjust_vars = np.zeros([n_indiv, 0])
     else:
-        if isinstance(ci_adjust_vars, str):
-            ci_adjust_vars = [ci_adjust_vars]
-        ci_adjust_vars = df_train[ci_adjust_vars]
-
+        assert isinstance(
+            ci_adjust_vars, pd.DataFrame
+        ), "ci_adjust_vars must be a DataFrame"
+    
     # step 1: build prediction model with pheno ~ pred_col + mean_adjust_cols + ...
     mean_design = pd.DataFrame(np.hstack([pred.reshape(-1, 1), mean_adjust_vars]))
     if mean_adjust_vars.shape[1] == 0:
@@ -498,16 +498,9 @@ def calibrate_adjust(
 
     if mean_adjust_vars is None:
         mean_adjust_vars = np.zeros([n_indiv, 0])
-    else:
-        if isinstance(mean_adjust_vars, str):
-            mean_adjust_vars = [mean_adjust_vars]
-        mean_adjust_vars = df_train[mean_adjust_vars]
+
     if ci_adjust_vars is None:
         ci_adjust_vars = np.zeros([n_indiv, 0])
-    else:
-        if isinstance(ci_adjust_vars, str):
-            ci_adjust_vars = [ci_adjust_vars]
-        ci_adjust_vars = df_train[ci_adjust_vars]
 
     # mean adjustment
     pred = model["mean_model"].predict(
