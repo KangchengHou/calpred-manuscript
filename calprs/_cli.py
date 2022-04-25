@@ -120,7 +120,7 @@ def model(
     """
     # inputs
     df_train = pd.read_csv(df, sep= '\t', index_col=0)
-
+    n_indiv = len(df_train)
     if mean_adjust_vars is None:
         mean_adjust_vars = np.zeros([n_indiv, 0])
     else:
@@ -184,6 +184,7 @@ def calibrate(
     model = pickle.load(pickle_in)
     df_test = pd.read_csv(df, sep='\t', index_col=0)
     
+    n_indiv = len(df_test)
     if mean_adjust_vars is None:
         mean_adjust_vars = np.zeros([n_indiv, 0])
     else:
