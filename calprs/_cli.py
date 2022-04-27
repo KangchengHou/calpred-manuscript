@@ -5,11 +5,6 @@ import numpy as np
 import structlog
 from ._evaluate import summarize_pred
 import pickle
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
-import statsmodels.stats.api as sms
-from scipy import stats
-from statsmodels.regression.quantile_regression import QuantReg
 import calprs
 
 
