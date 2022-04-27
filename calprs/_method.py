@@ -371,7 +371,6 @@ def calibrate_model(
         len(predstd) == n_indiv
     ), "y, pred, predstd must have the same length (number of individuals)"
 
-    # Step 1: fit <pheno_col> ~ <pred_col> + intercept + age +
     if mean_adjust_vars is None:
         mean_adjust_vars = np.zeros([n_indiv, 0])
     else:

@@ -4,6 +4,13 @@ import pandas as pd
 import numpy as np
 import structlog
 from ._evaluate import summarize_pred
+import pickle
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+import statsmodels.stats.api as sms
+from scipy import stats
+from statsmodels.regression.quantile_regression import QuantReg
+import calprs
 
 
 logger = structlog.get_logger()
@@ -79,9 +86,11 @@ def model(
     y: str,
     pred: str,
     predstd: str,
+    out: str,
     ci: float = 0.9,
-    mean_adjust_cols: List[str] = None,
-    ci_adjust_cols: List[str] = None,
+    ci_method: str = None,
+    mean_adjust_vars: List[str] = None,
+    ci_adjust_vars: List[str] = None,
 ):
     """
     Model the relationship between prediction interval and covariates
@@ -89,12 +98,105 @@ def model(
     Parameters
     ----------
     df : str
-        dataframe
+        Path to the dataframe containing the data.
     y : str
-        `y` column in the dataframe
+        Name of the column containing the observed phenotype.
     pred : str
-        `pred` column in the dataframe
+        Name of the column containing the predicted value.
+    predstd : str
+        Name of the column containing the initial predicted standard deviation.
+    ci: float
+        target confidence interval, default 0.9, <lower_col> and <upper_col> will be used for
+        calibration
+    ci_method: str
+        method for calibration, "scale" or "shift"
+    mean_adjust_colss: List[str]
+        a list of variables to be used for mean adjustment (columns corresponds to
+        variables)
+    ci_adjust_cols: List[str]
+        a list of variables to be used for ci adjustment (columns corresponds to
+        variables)
+    out: str
+        Path to the output pickle file.
     """
+    # inputs
+    df_train = pd.read_csv(df, sep="\t", index_col=0)
+
+    if isinstance(mean_adjust_vars, str):
+        mean_adjust_vars = [mean_adjust_vars]
+    mean_adjust_vars = df_train[mean_adjust_vars]
+
+    if isinstance(ci_adjust_vars, str):
+        ci_adjust_vars = [ci_adjust_vars]
+    ci_adjust_vars = df_train[ci_adjust_vars]
+
+    result_model = calprs.calibrate_model(
+        y=df_train[y].values,
+        pred=df_train[pred].values,
+        predstd=df_train[predstd].values,
+        ci=ci,
+        ci_method=ci_method,
+        mean_adjust_vars=mean_adjust_vars,
+        ci_adjust_vars=ci_adjust_vars,
+    )
+
+    pickle_out = open(out, "wb")
+    pickle.dump(result_model, pickle_out)
+    pickle_out.close()
+
+
+def calibrate(
+    model: str,
+    df: str,
+    pred: str,
+    predstd: str,
+    out: str,
+    mean_adjust_vars: List[str] = None,
+    ci_adjust_vars: List[str] = None,
+):
+    """
+    Adjust prediction and prediction standard deviation according to calibration model
+
+    Parameters
+    ----------
+    model : str
+        Path to the pickle file containing the model data.
+    df : str
+        Path to the test data.
+    pred : str
+        Name of the column containing the predicted value.
+    predstd : str
+        Name of the column containing the initial predicted standard deviation.
+    out : str
+        Path to the output file.
+    mean_adjust_cols: List[str]
+        a list of variables to be used for mean adjustment (columns corresponds to
+        variables)
+    ci_adjust_cols: List[str]
+        a list of variables to be used for ci adjustment (columns corresponds to
+        variables)
+    """
+    # inputs
+    pickle_in = open(model, "rb")
+    model = pickle.load(pickle_in)
+    df_test = pd.read_csv(df, sep="\t", index_col=0)
+
+    if isinstance(mean_adjust_vars, str):
+        mean_adjust_vars = [mean_adjust_vars]
+    mean_adjust_vars = df_test[mean_adjust_vars]
+
+    if isinstance(ci_adjust_vars, str):
+        ci_adjust_vars = [ci_adjust_vars]
+    ci_adjust_vars = df_test[ci_adjust_vars]
+
+    df_test["cal_prs"], df_test["cal_predstd"] = calprs.calibrate_adjust(
+        model=model,
+        pred=df_test[pred].values,
+        predstd=df_test[predstd].values,
+        mean_adjust_vars=mean_adjust_vars,
+        ci_adjust_vars=ci_adjust_vars,
+    )
+    df_test.to_csv(out, sep="\t", index=False)
 
 
 def cli():
