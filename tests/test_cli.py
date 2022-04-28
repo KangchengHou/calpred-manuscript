@@ -1,11 +1,13 @@
+from random import random
 import calprs
 import subprocess
 import os
 import tempfile
 import pandas as pd
 import numpy as np
+import random
 
-set.seed(1234)
+random.seed(1234)
 
 
 def test_r2diff():
