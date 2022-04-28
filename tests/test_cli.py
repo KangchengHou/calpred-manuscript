@@ -5,6 +5,8 @@ import tempfile
 import pandas as pd
 import numpy as np
 
+set.seed(1234)
+
 
 def test_r2diff():
     toy_data = os.path.join(calprs.get_data_folder(), "toy.tsv")
@@ -30,12 +32,21 @@ def test_r2diff():
 
 def test_model_calibrate():
     toy_data = os.path.join(calprs.get_data_folder(), "toy.tsv")
+    df = pd.read_csv(toy_data, sep="\t", index_col=0)
+    calibrate_idx = np.random.choice(df.index, size=3000, replace=False)
 
     tmp_dir = tempfile.TemporaryDirectory()
+    df_train = df.loc[calibrate_idx, :].copy()
+    train_path = os.path.join(tmp_dir.name, "toy_train.csv")
+    df_train.to_csv(train_path, index=False)
+    test_path = os.path.join(tmp_dir.name, "toy_test.csv")
+    df_test = df.loc[~df.index.isin(calibrate_idx), :].copy()
+    df_test.to_csv(test_path, index=False)
+
     out_path_1 = tmp_dir.name + "model_out.tsv"
     cmds_1 = [
         "calprs model",
-        f"--df {toy_data}",
+        f"--df {train_path}",
         "--y y",
         "--pred prs",
         "--predstd predstd_base" "--ci_method scale",
@@ -46,7 +57,8 @@ def test_model_calibrate():
     out_path_2 = tmp_dir.name + "cali_out.tsv"
     cmds_2 = [
         "calprs calibrate",
-        f"model {out_path_1}" f"--df {toy_data}",
+        f"--model {out_path_1}",
+        f"--df {test_path}",
         "--pred prs",
         "--predstd predstd_base",
         f"--out {out_path_2}",
