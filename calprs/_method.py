@@ -422,7 +422,7 @@ def calibrate_model(
                 endog=scale, exog=sm.add_constant(ci_adjust_vars)
             ).fit(q=ci)
             fitted_scale = quantreg_model.fittedvalues
-            predstd *= fitted_scale
+            predstd = predstd * fitted_scale
             result_model["ci_model"] = quantreg_model
         else:
             # use simple conformal prediction
@@ -431,7 +431,7 @@ def calibrate_model(
                 np.abs(y - pred) / (predstd * ci_z),
                 ci,
             )
-            predstd *= fitted_scale
+            predstd = predstd * fitted_scale
             result_model["ci_model"] = fitted_scale
 
     elif ci_method == "shift":
