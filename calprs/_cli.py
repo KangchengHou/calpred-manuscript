@@ -119,15 +119,17 @@ def model(
 
     if isinstance(mean_adjust_cols, str):
         mean_adjust_cols = [mean_adjust_cols]
-    mean_adjust_vars = df_train[mean_adjust_cols]
     if mean_adjust_cols is None:
         mean_adjust_vars = None
+    else:
+        mean_adjust_vars = df_train[mean_adjust_cols]
 
     if isinstance(ci_adjust_cols, str):
         ci_adjust_cols = [ci_adjust_cols]
-    ci_adjust_vars = df_train[ci_adjust_cols]
     if ci_adjust_cols is None:
         ci_adjust_vars = None
+    else:
+        ci_adjust_vars = df_train[ci_adjust_cols]
 
     result_model = calprs.calibrate_model(
         y=df_train[y].values,
@@ -182,15 +184,17 @@ def calibrate(
 
     if isinstance(mean_adjust_cols, str):
         mean_adjust_cols = [mean_adjust_cols]
-    mean_adjust_vars = df_test[mean_adjust_cols]
     if mean_adjust_cols is None:
         mean_adjust_vars = None
+    else:
+        mean_adjust_vars = df_test[mean_adjust_cols]
 
     if isinstance(ci_adjust_cols, str):
         ci_adjust_cols = [ci_adjust_cols]
-    ci_adjust_vars = df_test[ci_adjust_cols]
     if ci_adjust_cols is None:
         ci_adjust_vars = None
+    else:
+        ci_adjust_vars = df_test[ci_adjust_cols]
 
     df_test["cal_prs"], df_test["cal_predstd"] = calprs.calibrate_adjust(
         model=model,
