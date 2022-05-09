@@ -134,7 +134,7 @@ def model(
     if "y" in df_train.columns:
         print("y column is present")
     else:
-        print("y column is not here. Popping 'label' will produce KeyError")
+        print("y column is not here. Popping 'y' will produce KeyError")
 
     result_model = calprs.calibrate_model(
         y=df_train[y].values,
