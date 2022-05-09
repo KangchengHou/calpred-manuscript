@@ -39,11 +39,11 @@ def test_model_calibrate():
 
     tmp_dir = tempfile.TemporaryDirectory()
     df_train = df.loc[calibrate_idx, :].copy()
-    train_path = os.path.join(tmp_dir.name, "toy_train.csv")
-    df_train.to_csv(train_path, index=False)
-    test_path = os.path.join(tmp_dir.name, "toy_test.csv")
+    train_path = os.path.join(tmp_dir.name, "toy_train.tsv")
+    df_train.to_csv(train_path, sep="\t", index=False)
+    test_path = os.path.join(tmp_dir.name, "toy_test.tsv")
     df_test = df.loc[~df.index.isin(calibrate_idx), :].copy()
-    df_test.to_csv(test_path, index=False)
+    df_test.to_csv(test_path, sep="\t", index=False)
 
     out_path_1 = tmp_dir.name + "model_out.tsv"
     cmds_1 = [
