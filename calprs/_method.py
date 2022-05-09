@@ -516,7 +516,7 @@ def calibrate_adjust(
             fitted_scale = model["ci_model"]
         else:
             fitted_scale = model["ci_model"].predict(sm.add_constant(ci_adjust_vars))
-        predstd *= fitted_scale
+        predstd = predstd * fitted_scale
 
     elif model["ci_method"] == "shift":
         if isinstance(model["ci_model"], float):
