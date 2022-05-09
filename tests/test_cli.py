@@ -71,5 +71,5 @@ def test_model_calibrate():
     tmp_dir.cleanup()
 
     # test difference
-    assert np.allclose(df_out["cal_prs"].values, [-1.8686196, 2.0814843])
-    assert np.allclose(df_out["cal_predstd"].values, [0.7683203, 0.8984368])
+    assert np.allclose(df_out["cal_prs"].values, [-1.9, 2.2])
+    assert np.allclose(df_out["cal_predstd"].values, [0.7, 0.9])
