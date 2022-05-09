@@ -51,7 +51,8 @@ def test_model_calibrate():
         f"--df {train_path}",
         "--y y",
         "--pred prs",
-        "--predstd predstd_base" "--ci_method scale",
+        "--predstd predstd_base",
+        "--ci_method scale",
         f"--out {out_path_1}",
     ]
     subprocess.check_call(" ".join(cmds_1), shell=True)
