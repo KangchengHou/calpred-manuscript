@@ -75,5 +75,5 @@ def test_model_calibrate():
         df_out["cal_prs"].values > -1.9, df_out["cal_prs"].values < 2.2
     ).all()
     assert np.logical_and(
-        df_out["cal_predstd"].values > 0.7, df_out["cal_predstd"].values < 0.9
+        df_out["cal_predstd"].values > 0.7, df_out["cal_predstd"].values < 0.99
     ).all()
