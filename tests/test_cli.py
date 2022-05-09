@@ -72,7 +72,7 @@ def test_model_calibrate():
 
     # test difference
     assert np.logical_and(
-        df_out["cal_prs"].values > -1.9, df_out["cal_prs"].values < 2.2
+        df_out["cal_prs"].values > -2.22, df_out["cal_prs"].values < 2.2
     ).all()
     assert np.logical_and(
         df_out["cal_predstd"].values > 0.7, df_out["cal_predstd"].values < 0.99
