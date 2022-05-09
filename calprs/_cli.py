@@ -131,8 +131,10 @@ def model(
     else:
         ci_adjust_vars = df_train[ci_adjust_cols]
 
+    input_y = df_train[y].values
+
     result_model = calprs.calibrate_model(
-        y=df_train[y].values,
+        y=input_y,
         pred=df_train[pred].values,
         predstd=df_train[predstd].values,
         ci=ci,
