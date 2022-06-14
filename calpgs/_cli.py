@@ -5,7 +5,7 @@ import numpy as np
 import structlog
 from ._evaluate import summarize_pred
 import pickle
-import calprs
+import calpgs
 
 
 logger = structlog.get_logger()
@@ -131,7 +131,7 @@ def model(
     else:
         ci_adjust_vars = df_train[ci_adjust_cols]
 
-    result_model = calprs.calibrate_model(
+    result_model = calpgs.calibrate_model(
         y=df_train[y].values,
         pred=df_train[pred].values,
         predstd=df_train[predstd].values,
@@ -196,7 +196,7 @@ def calibrate(
     else:
         ci_adjust_vars = df_test[ci_adjust_cols]
 
-    df_test["cal_prs"], df_test["cal_predstd"] = calprs.calibrate_adjust(
+    df_test["cal_prs"], df_test["cal_predstd"] = calpgs.calibrate_adjust(
         model=model,
         pred=df_test[pred].values,
         predstd=df_test[predstd].values,

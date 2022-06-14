@@ -8,11 +8,11 @@ import statsmodels.api as sm
 from scipy.stats import pearsonr
 from typing import List
 import warnings
-import calprs
+import calpgs
 
 # CONSTANTS
 COVAR_COLS = ["AGE", "SEX", "DEPRIVATION_INDEX"] + [f"PC{i}" for i in range(1, 11)]
-DATA_DIR = "/u/project/pasaniuc/pasaniucdata/admixture/projects/calprs/experiments/00-compile-data/out"
+DATA_DIR = "/u/project/pasaniuc/pasaniucdata/admixture/projects/calpgs/experiments/00-compile-data/out"
 PHENO_DIR = "/u/project/sgss/UKBB/PRS-RESEARCH/03-compile-pheno/out"
 
 MAIN_TRAIT_LIST = [

@@ -1,5 +1,5 @@
 from random import random
-import calprs
+import calpgs
 import subprocess
 import os
 import tempfile
@@ -11,12 +11,12 @@ random.seed(1234)
 
 
 def test_r2diff():
-    toy_data = os.path.join(calprs.get_data_folder(), "toy.tsv")
+    toy_data = os.path.join(calpgs.get_data_folder(), "toy.tsv")
 
     tmp_dir = tempfile.TemporaryDirectory()
     out_path = tmp_dir.name + "out.tsv"
     cmds = [
-        "calprs r2diff",
+        "calpgs r2diff",
         f"--df {toy_data}",
         "--y y_cov",
         "--pred prs",
@@ -33,7 +33,7 @@ def test_r2diff():
 
 
 def test_model_calibrate():
-    toy_data = os.path.join(calprs.get_data_folder(), "toy.tsv")
+    toy_data = os.path.join(calpgs.get_data_folder(), "toy.tsv")
     df = pd.read_csv(toy_data, sep="\t", index_col=0)
     calibrate_idx = np.random.choice(df.index, size=3000, replace=False)
 
@@ -47,7 +47,7 @@ def test_model_calibrate():
 
     out_path_1 = tmp_dir.name + "model_out.tsv"
     cmds_1 = [
-        "calprs model",
+        "calpgs model",
         f"--df {train_path}",
         "--y y",
         "--pred prs",
@@ -59,7 +59,7 @@ def test_model_calibrate():
 
     out_path_2 = tmp_dir.name + "cali_out.tsv"
     cmds_2 = [
-        "calprs calibrate",
+        "calpgs calibrate",
         f"--model {out_path_1}",
         f"--df {test_path}",
         "--pred prs",
