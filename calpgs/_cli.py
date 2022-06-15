@@ -5,7 +5,7 @@ import numpy as np
 import structlog
 from ._evaluate import summarize_pred
 import pickle
-import calprs
+import calpgs
 
 
 logger = structlog.get_logger()
@@ -84,8 +84,8 @@ def model(
     out: str,
     ci: float = 0.9,
     ci_method: str = None,
-    mean_adjust_vars: List[str] = None,
-    ci_adjust_vars: List[str] = None,
+    mean_adjust_cols: List[str] = None,
+    ci_adjust_cols: List[str] = None,
 ):
     """
     Model the relationship between prediction interval and covariates
@@ -117,15 +117,21 @@ def model(
     # inputs
     df_train = pd.read_csv(df, sep="\t", index_col=0)
 
-    if isinstance(mean_adjust_vars, str):
-        mean_adjust_vars = [mean_adjust_vars]
-    mean_adjust_vars = df_train[mean_adjust_vars]
+    if isinstance(mean_adjust_cols, str):
+        mean_adjust_cols = [mean_adjust_cols]
+    if mean_adjust_cols is None:
+        mean_adjust_vars = None
+    else:
+        mean_adjust_vars = df_train[mean_adjust_cols]
 
-    if isinstance(ci_adjust_vars, str):
-        ci_adjust_vars = [ci_adjust_vars]
-    ci_adjust_vars = df_train[ci_adjust_vars]
+    if isinstance(ci_adjust_cols, str):
+        ci_adjust_cols = [ci_adjust_cols]
+    if ci_adjust_cols is None:
+        ci_adjust_vars = None
+    else:
+        ci_adjust_vars = df_train[ci_adjust_cols]
 
-    result_model = calprs.calibrate_model(
+    result_model = calpgs.calibrate_model(
         y=df_train[y].values,
         pred=df_train[pred].values,
         predstd=df_train[predstd].values,
@@ -146,8 +152,8 @@ def calibrate(
     pred: str,
     predstd: str,
     out: str,
-    mean_adjust_vars: List[str] = None,
-    ci_adjust_vars: List[str] = None,
+    mean_adjust_cols: List[str] = None,
+    ci_adjust_cols: List[str] = None,
 ):
     """
     Adjust prediction and prediction standard deviation according to calibration model
@@ -176,15 +182,21 @@ def calibrate(
     model = pickle.load(pickle_in)
     df_test = pd.read_csv(df, sep="\t", index_col=0)
 
-    if isinstance(mean_adjust_vars, str):
-        mean_adjust_vars = [mean_adjust_vars]
-    mean_adjust_vars = df_test[mean_adjust_vars]
+    if isinstance(mean_adjust_cols, str):
+        mean_adjust_cols = [mean_adjust_cols]
+    if mean_adjust_cols is None:
+        mean_adjust_vars = None
+    else:
+        mean_adjust_vars = df_test[mean_adjust_cols]
 
-    if isinstance(ci_adjust_vars, str):
-        ci_adjust_vars = [ci_adjust_vars]
-    ci_adjust_vars = df_test[ci_adjust_vars]
+    if isinstance(ci_adjust_cols, str):
+        ci_adjust_cols = [ci_adjust_cols]
+    if ci_adjust_cols is None:
+        ci_adjust_vars = None
+    else:
+        ci_adjust_vars = df_test[ci_adjust_cols]
 
-    df_test["cal_prs"], df_test["cal_predstd"] = calprs.calibrate_adjust(
+    df_test["cal_prs"], df_test["cal_predstd"] = calpgs.calibrate_adjust(
         model=model,
         pred=df_test[pred].values,
         predstd=df_test[predstd].values,

@@ -9,12 +9,12 @@ if LooseVersion(setuptools.__version__) < "36.2":
     raise ImportError("setuptools>=36.2 is required")
 
 setup(
-    name="calprs",
+    name="calpgs",
     version="0.1",
-    description="Calibrated PRS",
+    description="Calibrated PGS",
     author="Kangcheng Hou, Ziqi Xu",
     author_email="kangchenghou@gmail.com",
-    packages=["calprs"],
+    packages=["calpgs"],
     setup_requires=["numpy>=1.10"],
-    entry_points={"console_scripts": ["calprs=calprs._cli:cli"]},
+    entry_points={"console_scripts": ["calpgs=calpgs._cli:cli"]},
 )

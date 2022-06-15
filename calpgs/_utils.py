@@ -12,7 +12,7 @@ def get_data_folder():
     """
     import os
 
-    p = os.path.dirname(__import__("calprs").__path__[0])
+    p = os.path.dirname(__import__("calpgs").__path__[0])
     return os.path.join(p, "tests", "test-data")
 
 
