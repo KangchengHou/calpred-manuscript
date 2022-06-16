@@ -58,12 +58,14 @@ def r2diff(
 
     out_list = []
     for col in group:
-        n_unique = len(np.unique(df[col].dropna().values))
+        # drop the entire row if one of col, y, pred is missing
+        df_tmp = df[[col, y, pred]].dropna()
+        n_unique = len(np.unique(df_tmp[col].values))
         if n_unique > 5:
             logger.info(f"Converting column '{col}' to 5 quintiles")
-            df[col] = pd.qcut(df[col], q=5, duplicates="drop").cat.codes
+            df_tmp[col] = pd.qcut(df_tmp[col], q=5, duplicates="drop").cat.codes
         df_res, df_res_se, r2_diff = summarize_pred(
-            df,
+            df_tmp,
             y_col=y,
             pred_col=pred,
             group_col=col,
