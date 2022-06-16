@@ -128,11 +128,16 @@ def summarize_pred(
                     n_bootstrap=0,
                 )
             )
-        df_res_se = pd.DataFrame(
-            np.dstack(bootstrap_dfs).std(axis=2),
-            index=df_res.index,
-            columns=df_res.columns,
-        )
+        if isinstance(df_res, pd.Series):
+            df_res_se = pd.Series(
+                np.dstack(bootstrap_dfs).std(axis=2).flatten(), index=df_res.index
+            )
+        else:
+            df_res_se = pd.DataFrame(
+                np.dstack(bootstrap_dfs).std(axis=2),
+                index=df_res.index,
+                columns=df_res.columns,
+            )
         if (group_col is not None) and return_r2_diff:
             r2_diff = np.array(
                 [d["r2"].iloc[-1] - d["r2"].iloc[0] for d in bootstrap_dfs]

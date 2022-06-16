@@ -19,7 +19,7 @@ def log_params(name, params):
 
 
 def r2diff(
-    df: str,
+    df,
     y: str,
     pred: str,
     group: Union[str, List[str]],
@@ -50,6 +50,9 @@ def r2diff(
     np.random.seed(seed)
     log_params("r2diff", locals())
     df = pd.read_csv(df, sep="\t", index_col=0)
+    n_raw = df.shape[0]
+    df = df.dropna(subset=[y, pred], inplace=True)
+    logger.info(f"{df.shape[0]}/{n_raw} rows without missing values at {y} and {pred}")
     if isinstance(group, str):
         group = [group]
 
