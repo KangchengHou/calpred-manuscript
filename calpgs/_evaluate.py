@@ -25,6 +25,7 @@ def summarize_pred(
     ci=0.90,
     group_col: str = None,
     n_bootstrap: int = 0,
+    cor: str = "pearson",
     return_r2_diff=False,
 ):
     """
@@ -43,7 +44,9 @@ def summarize_pred(
         standard deviation of the prediction
     group_col : str
         Name of the column containing the group variable.
-    return_se : bool
+    cor : str
+        correlation method, default pearson, can be pearson, spearman
+    return_r2_diff : bool
         whether to return standard error of prediction,
 
     Returns
@@ -61,12 +64,16 @@ def summarize_pred(
     # dropping rows with missing values
     df = df[val_cols].dropna()
 
+    if cor == "pearson":
+        cor_func = stats.pearsonr
+    elif cor == "spearman":
+        cor_func = stats.spearmanr
+    else:
+        raise ValueError(f"cor must be pearson or spearman, got {cor}")
     ci_z = stats.norm.ppf((1 + ci) / 2)
     if group_col is not None:
         df_grouped = df.groupby(group_col)
-        r2 = df_grouped.apply(
-            lambda df: stats.linregress(df[pred_col], df[y_col]).rvalue ** 2
-        )
+        r2 = df_grouped.apply(lambda df: cor_func(df[pred_col], df[y_col])[0] ** 2)
 
         y_std = df_grouped.apply(lambda df: df[y_col].std())
         pred_std = df_grouped.apply(lambda df: df[pred_col].std())
@@ -90,7 +97,7 @@ def summarize_pred(
             )
         df_res = pd.DataFrame(df_res)
     else:
-        r2 = stats.linregress((df[pred_col]) / 2, df[y_col]).rvalue ** 2
+        r2 = cor_func(df[pred_col], df[y_col])[0] ** 2
         y_std = df[y_col].std()
         pred_std = df[pred_col].std()
 
