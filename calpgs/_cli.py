@@ -152,7 +152,7 @@ def model(
 
 
 def calibrate(
-    model: str,
+    model,
     df: str,
     pred: str,
     predstd: str,
