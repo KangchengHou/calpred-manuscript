@@ -1,22 +1,18 @@
-from random import random
 import calpgs
 import subprocess
 import os
 import tempfile
 import pandas as pd
 import numpy as np
-import random
-
-random.seed(1234)
 
 
-def test_r2diff():
+def test_group_r2():
     toy_data = os.path.join(calpgs.get_data_folder(), "toy.tsv")
 
     tmp_dir = tempfile.TemporaryDirectory()
-    out_path = tmp_dir.name + "out.tsv"
+    out_path = tmp_dir.name + "result"
     cmds = [
-        "calpgs r2diff",
+        "calpgs group-r2",
         f"--df {toy_data}",
         "--y y_cov",
         "--pred prs",
@@ -24,7 +20,7 @@ def test_r2diff():
         f"--out {out_path}",
     ]
     subprocess.check_call(" ".join(cmds), shell=True)
-    df_out = pd.read_csv(out_path, index_col=0, sep="\t")
+    df_out = pd.read_csv(out_path + ".r2diff.tsv", index_col=0, sep="\t")
     tmp_dir.cleanup()
 
     # test difference
@@ -33,6 +29,7 @@ def test_r2diff():
 
 
 def test_model_calibrate():
+    np.random.seed(1234)
     toy_data = os.path.join(calpgs.get_data_folder(), "toy.tsv")
     df = pd.read_csv(toy_data, sep="\t", index_col=0)
     calibrate_idx = np.random.choice(df.index, size=3000, replace=False)

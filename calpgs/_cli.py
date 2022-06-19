@@ -18,12 +18,13 @@ def log_params(name, params):
     )
 
 
-def r2diff(
+def group_r2(
     df,
     y: str,
     pred: str,
     group: Union[str, List[str]],
     out: str,
+    cor: str = "pearson",
     n_bootstrap: int = 1000,
     seed=1234,
 ):
@@ -42,13 +43,15 @@ def r2diff(
     group : Union[str, List[str]]
         Name of the column containing the group variable.
     out : str
-        Path to the output file.
+        output prefix, <out>.r2.tsv, <out>.r2diff.tsv will be created
+    cor : str
+        Correlation method to use. Options: pearson (default) or spearman.
     n_bootstrap : int
         Number of bootstraps to perform, default 1000.
     """
 
     np.random.seed(seed)
-    log_params("r2diff", locals())
+    log_params("group-r2", locals())
     df = pd.read_csv(df, sep="\t", index_col=0)
     n_raw = df.shape[0]
     df.dropna(subset=[y, pred], inplace=True)
@@ -56,29 +59,51 @@ def r2diff(
     if isinstance(group, str):
         group = [group]
 
-    out_list = []
+    df_r2 = []
+    df_diff = []
+    df_cat = []
     for col in group:
         # drop the entire row if one of col, y, pred is missing
         df_tmp = df[[col, y, pred]].dropna()
         n_unique = len(np.unique(df_tmp[col].values))
         if n_unique > 5:
             logger.info(f"Converting column '{col}' to 5 quintiles")
-            df_tmp[col] = pd.qcut(df_tmp[col], q=5, duplicates="drop").cat.codes
+            cat_var = pd.qcut(df_tmp[col], q=5, duplicates="drop")
+            df_col_cat = pd.DataFrame(
+                enumerate(cat_var.cat.categories), columns=["q", "cat"]
+            )
+            df_col_cat.insert(0, "group", col)
+            df_cat.append(df_col_cat)
+            df_tmp[col] = cat_var.cat.codes
         df_res, df_res_se, r2_diff = summarize_pred(
             df_tmp,
             y_col=y,
             pred_col=pred,
             group_col=col,
             n_bootstrap=n_bootstrap,
+            cor=cor,
             return_r2_diff=True,
         )
-        out_list.append(
+        df_r2.append(
+            pd.DataFrame(
+                {
+                    "group": col,
+                    "subgroup": df_res.index.values,
+                    "r2": df_res["r2"].values,
+                    "r2_se": df_res_se["r2"].values,
+                }
+            )
+        )
+        df_diff.append(
             [col, df_res["r2"].iloc[-1] - df_res["r2"].iloc[0], np.mean(r2_diff > 0)]
         )
 
-    df_out = pd.DataFrame(out_list, columns=["group", "r2diff", "prob>0"])
-    df_out.to_csv(out, sep="\t", index=False, float_format="%.6g")
-    print(df_out)
+    pd.concat(df_r2).to_csv(out + ".r2.tsv", sep="\t", index=False, float_format="%.6g")
+    pd.DataFrame(df_diff, columns=["group", "r2diff", "prob>0"]).to_csv(
+        out + ".r2diff.tsv", sep="\t", index=False, float_format="%.6g"
+    )
+    if len(df_cat) > 0:
+        pd.concat(df_cat).to_csv(out + ".cat.tsv", sep="\t", index=False)
 
 
 def model(
