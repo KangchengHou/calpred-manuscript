@@ -94,12 +94,18 @@ def group_r2(
                 }
             )
         )
+
         df_diff.append(
-            [col, df_res["r2"].iloc[-1] - df_res["r2"].iloc[0], np.mean(r2_diff > 0)]
+            [
+                col,
+                df_res["r2"].iloc[-1] - df_res["r2"].iloc[0],
+                np.mean(r2_diff > 0),
+                np.mean(r2_diff) / np.std(r2_diff),
+            ]
         )
 
     pd.concat(df_r2).to_csv(out + ".r2.tsv", sep="\t", index=False, float_format="%.6g")
-    pd.DataFrame(df_diff, columns=["group", "r2diff", "prob>0"]).to_csv(
+    pd.DataFrame(df_diff, columns=["group", "r2diff", "prob>0", "zscore"]).to_csv(
         out + ".r2diff.tsv", sep="\t", index=False, float_format="%.6g"
     )
     if len(df_cat) > 0:
