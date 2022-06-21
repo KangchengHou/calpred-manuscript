@@ -9,6 +9,85 @@ from typing import List, Dict
 import structlog
 from scipy import stats
 import matplotlib.pyplot as plt
+from scipy.optimize import minimize
+
+
+def multiple_logpdfs(x, means, covs):
+    """
+    From http://gregorygundersen.com/blog/2020/12/12/group-multivariate-normal-pdf/
+
+    x: np.ndarray
+        n x d
+    means: np.ndarray
+        n x d
+    covs: np.ndarray
+        n x d x d
+    """
+    # Thankfully, NumPy broadcasts `eigh`.
+    vals, vecs = np.linalg.eigh(covs)
+
+    # Compute the log determinants across the second axis.
+    logdets = np.sum(np.log(vals), axis=1)
+
+    # Invert the eigenvalues.
+    valsinvs = 1.0 / vals
+
+    # Add a dimension to `valsinvs` so that NumPy broadcasts appropriately.
+    Us = vecs * np.sqrt(valsinvs)[:, None]
+    devs = x - means
+
+    # Use `einsum` for matrix-vector multiplications across the first dimension.
+    devUs = np.einsum("ni,nij->nj", devs, Us)
+
+    # Compute the Mahalanobis distance by squaring each term and summing.
+    mahas = np.sum(np.square(devUs), axis=1)
+
+    # Compute and broadcast scalar normalizers.
+    dim = len(vals[0])
+    log2pi = np.log(2 * np.pi)
+    return -0.5 * (dim * log2pi + mahas + logdets)
+
+
+def estimate_het(xy: np.ndarray, covar: np.ndarray, eps: float = 1e-3) -> np.ndarray:
+    """
+    Parameters
+    ----------
+    xy: np.ndarray
+        n x 2 (x, y) variables, assumed to have variance 1
+    covar: np.ndarray
+        n x c covariates, assume no intercept is present
+    eps: float
+        epsilon to prevent rho = 1, which makes the multivariate normal
+        degenerate.
+
+    Returns
+    -------
+    params: np.ndarray
+        (c + 1) estimates
+    """
+    assert xy.ndim == 2
+    assert covar.ndim == 2
+    # prepend column of 1
+    n_data = xy.shape[0]
+    covar = np.c_[np.ones(covar.shape[0]), covar]
+    n_covar = covar.shape[1]
+    assert covar.shape[0] == n_data
+
+    def negloglik(params):
+        rho = np.clip(covar @ params, -1 + eps, 1 - eps)
+
+        covs = np.zeros((n_data, 2, 2))
+        covs[:, 0, 0] = covs[:, 1, 1] = 1.0
+        covs[:, 0, 1] = covs[:, 1, 0] = rho
+
+        return (-1) * multiple_logpdfs(x=xy, means=np.array([0, 0]), covs=covs).sum()
+
+    # initialize the intercept with overall R2
+    avg_coef = np.corrcoef(xy[:, 0], xy[:, 1])[0, 1]
+    model = minimize(
+        negloglik, np.array([avg_coef] + [0.0] * (n_covar - 1)), method="Nelder-Mead"
+    )
+    return model
 
 
 def het_breuschpagan(resid, exog_het, robust=True):
