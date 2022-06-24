@@ -610,3 +610,34 @@ def calibrate_adjust(
     if isinstance(predstd, pd.Series):
         predstd = predstd.values
     return pred, predstd
+
+
+def calibrate_and_adjust(
+    train_x: np.ndarray, train_y: np.ndarray, test_x: np.ndarray, ci: float = 0.9
+):
+    """
+    Perform the calibration and adjust
+    TODO: fitting a mean + interval model would be more appropriate here.
+
+    Parameters
+    ----------
+    train_x : np.ndarray
+        (n_indiv, n_cov), intercept should not be included
+    train_y : np.ndarray
+        (n_indiv, ) phenotype
+    test_x : np.ndarray
+        (n_indiv, n_cov) intercept should not be included
+    ci : float
+        target confidence interval, default 0.9, <lower_col> and <upper_col> will be
+        used for calibration
+    """
+    ci_z = stats.norm.ppf((1 + ci) / 2)
+    alpha = (1 - ci) / 2
+    models = {
+        q: QuantReg(endog=train_y, exog=sm.add_constant(train_x)).fit(q=q)
+        for q in [alpha, 0.5, 1 - alpha]
+    }
+    preds = {q: models[q].predict(sm.add_constant(test_x)) for q in models}
+    pred_median = preds[0.5]
+    predstd = (preds[1 - alpha] - preds[alpha]) / 2 / ci_z
+    return pred_median, predstd, models
