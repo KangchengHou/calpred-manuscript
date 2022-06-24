@@ -24,7 +24,9 @@ def group_r2(
     pred: str,
     group: Union[str, List[str]],
     out: str,
+    predstd: str = None,
     cor: str = "pearson",
+    n_subgroup: int = 5,
     n_bootstrap: int = 1000,
     seed=1234,
 ):
@@ -44,6 +46,8 @@ def group_r2(
         Name of the column containing the group variable.
     out : str
         output prefix, <out>.r2.tsv, <out>.r2diff.tsv will be created
+    predstd : str
+        Name of the column containing the initial predicted standard deviation.
     cor : str
         Correlation method to use. Options: pearson (default) or spearman.
     n_bootstrap : int
@@ -62,13 +66,18 @@ def group_r2(
     df_r2 = []
     df_diff = []
     df_cat = []
+    df_predint = []
+
     for col in group:
         # drop the entire row if one of col, y, pred is missing
-        df_tmp = df[[col, y, pred]].dropna()
+        subset_cols = [col, y, pred]
+        if predstd is not None:
+            subset_cols.append(predstd)
+        df_tmp = df[subset_cols].dropna()
         n_unique = len(np.unique(df_tmp[col].values))
-        if n_unique > 5:
-            logger.info(f"Converting column '{col}' to 5 quintiles")
-            cat_var = pd.qcut(df_tmp[col], q=5, duplicates="drop")
+        if n_unique > n_subgroup:
+            logger.info(f"Converting column '{col}' to {n_subgroup} quintiles")
+            cat_var = pd.qcut(df_tmp[col], q=n_subgroup, duplicates="drop")
             df_col_cat = pd.DataFrame(
                 enumerate(cat_var.cat.categories), columns=["q", "cat"]
             )
@@ -79,11 +88,25 @@ def group_r2(
             df_tmp,
             y_col=y,
             pred_col=pred,
+            predstd_col=predstd,
             group_col=col,
             n_bootstrap=n_bootstrap,
             cor=cor,
             return_r2_diff=True,
         )
+        if predstd is not None:
+            df_predint.append(
+                pd.DataFrame(
+                    {
+                        "group": col,
+                        "subgroup": df_res.index.values,
+                        "coverage": df_res["coverage"].values,
+                        "coverage_se": df_res_se["coverage"].values,
+                        "length": df_res["length"].values,
+                        "length_se": df_res_se["length"].values,
+                    }
+                )
+            )
         df_r2.append(
             pd.DataFrame(
                 {
@@ -110,6 +133,10 @@ def group_r2(
     )
     if len(df_cat) > 0:
         pd.concat(df_cat).to_csv(out + ".cat.tsv", sep="\t", index=False)
+    if len(df_predint) > 0:
+        pd.concat(df_predint).to_csv(
+            out + ".predint.tsv", sep="\t", index=False, float_format="%.6g"
+        )
 
 
 def model(
