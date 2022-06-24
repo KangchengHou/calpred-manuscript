@@ -26,6 +26,7 @@ def group_r2(
     out: str,
     predstd: str = None,
     cor: str = "pearson",
+    n_subgroup: int = 5,
     n_bootstrap: int = 1000,
     seed=1234,
 ):
@@ -74,9 +75,9 @@ def group_r2(
             subset_cols.append(predstd)
         df_tmp = df[subset_cols].dropna()
         n_unique = len(np.unique(df_tmp[col].values))
-        if n_unique > 5:
-            logger.info(f"Converting column '{col}' to 5 quintiles")
-            cat_var = pd.qcut(df_tmp[col], q=5, duplicates="drop")
+        if n_unique > n_subgroup:
+            logger.info(f"Converting column '{col}' to {n_subgroup} quintiles")
+            cat_var = pd.qcut(df_tmp[col], q=n_subgroup, duplicates="drop")
             df_col_cat = pd.DataFrame(
                 enumerate(cat_var.cat.categories), columns=["q", "cat"]
             )
