@@ -90,6 +90,114 @@ def estimate_het(xy: np.ndarray, covar: np.ndarray, eps: float = 1e-3) -> np.nda
     return model
 
 
+def fit_het_linear(y: np.ndarray, mean_covar: np.ndarray, var_covar: np.ndarray):
+    """Fit a linear regression which allows for heterogeneity in variance
+
+    y ~ N(mean_covar * mean_beta, exp(var_covar * var_beta))
+
+    Parameters
+    ----------
+    y : np.ndarray
+        response variables (n_indiv, )
+    mean_covar : np.ndarray
+        mean covariates (n_indiv, n_covar)
+        intercept should be manually added
+    var_covar : np.ndarray
+        variance covariates (n_indiv, n_covar)
+        intercept should be manually added
+
+    Returns
+    -------
+    mean_beta : np.ndarray
+        mean betas (n_covar, )
+    var_beta : np.ndarray
+        variance betas (n_covar, )
+    """
+    assert y.ndim == 1
+    assert (mean_covar.ndim == 2) & (var_covar.ndim == 2)
+    n_indiv = len(y)
+
+    assert (mean_covar.shape[0] == n_indiv) & (var_covar.shape[0] == n_indiv)
+    # prepend column of 1
+    n_mean_params = mean_covar.shape[1]
+    n_var_params = var_covar.shape[1]
+
+    def negloglik(params):
+        """Evaluate the negative log-likelihood of the model
+
+        Parameters
+        ----------
+        params : _type_
+            pair of np.ndarray mean_beta, var_beta
+
+        Returns
+        -------
+        float
+            negative log-likelihood
+        """
+        mean_beta, var_beta = params[:n_mean_params], params[n_mean_params:]
+        mean = mean_covar @ mean_beta
+        var = np.exp(var_covar @ var_beta)
+
+        return (-1) * stats.norm.logpdf(y, loc=mean, scale=np.sqrt(var)).sum()
+
+    # initialize the mean_beta with regression mean
+    # initalize the var_beta with [overall_r2, 0, 0, ...]
+    init_mean_model = sm.OLS(y, mean_covar).fit()
+    init_mean_beta = init_mean_model.params
+    init_var = np.mean(init_mean_model.resid ** 2)
+    init_var_beta = np.array([init_var] + [0.0] * (var_covar.shape[1] - 1))
+
+    model = minimize(
+        negloglik,
+        [init_mean_beta, init_var_beta],
+        method="L-BFGS-B",
+        options={"maxiter": 1000},
+    )
+    params = model.x
+    mean_beta, var_beta = params[:n_mean_params], params[n_mean_params:]
+    return mean_beta, var_beta
+
+
+def remlscore_wrapper(y: np.ndarray, X: np.ndarray, Z: np.ndarray):
+    """
+    Wrapper for remlscore function in R.
+
+    Parameters
+    ----------
+    y : np.ndarray
+        response variable.
+    X : np.ndarray
+        design matrix for mean effects
+    Z : np.ndarray
+        design matrix for variance effects
+
+    Returns
+    -------
+    beta: np.ndarray
+        estimated mean effects
+    gamma: np.ndarray
+        estimated gamma effects
+    """
+    if getattr(remlscore_wrapper, "remlscore", None) is None:
+        from rpy2.robjects.packages import importr
+        import rpy2.robjects.numpy2ri
+
+        rpy2.robjects.numpy2ri.activate()
+        statmod = importr("statmod")
+        remlscore_wrapper.remlscore = statmod.remlscore  # type: ignore
+
+    assert y.ndim == 1
+    assert X.ndim == 2
+    assert Z.ndim == 2
+    assert X.shape[0] == Z.shape[0]
+    assert len(y) == X.shape[0]
+    fit = remlscore_wrapper.remlscore(y.reshape(-1, 1), X, Z)  # type: ignore
+    beta = fit.rx2("beta")
+    gamma = fit.rx2("gamma")
+    return beta.flatten(), gamma.flatten()
+
+
 def het_breuschpagan(resid, exog_het, robust=True):
     r"""
     Breusch-Pagan Lagrange Multiplier test for heteroscedasticity
@@ -613,7 +721,11 @@ def calibrate_adjust(
 
 
 def calibrate_and_adjust(
-    train_x: np.ndarray, train_y: np.ndarray, test_x: np.ndarray, ci: float = 0.9
+    train_x: np.ndarray,
+    train_y: np.ndarray,
+    test_x: np.ndarray,
+    ci: float = 0.9,
+    method="qr",
 ):
     """
     Perform the calibration and adjust
@@ -630,14 +742,30 @@ def calibrate_and_adjust(
     ci : float
         target confidence interval, default 0.9, <lower_col> and <upper_col> will be
         used for calibration
+    method : str
+        method for calibration, 'qr': quantile regression or 'vr': variance regression
     """
     ci_z = stats.norm.ppf((1 + ci) / 2)
-    alpha = (1 - ci) / 2
-    models = {
-        q: QuantReg(endog=train_y, exog=sm.add_constant(train_x)).fit(q=q)
-        for q in [alpha, 0.5, 1 - alpha]
-    }
-    preds = {q: models[q].predict(sm.add_constant(test_x)) for q in models}
-    pred_median = preds[0.5]
-    predstd = (preds[1 - alpha] - preds[alpha]) / 2 / ci_z
-    return pred_median, predstd, models
+
+    if method == "qr":
+        alpha = (1 - ci) / 2
+        models = [
+            QuantReg(endog=train_y, exog=sm.add_constant(train_x)).fit(q=q)
+            for q in [alpha, 0.5, 1 - alpha]
+        ]
+        preds = [model.predict(sm.add_constant(test_x)) for model in models]
+        pred_median = preds[1]
+        pred_std = (preds[2] - preds[0]) / (2 * ci_z)
+        return pred_median, pred_std
+    elif method == "vr":
+        mean_beta, var_beta = fit_het_linear(
+            y=train_y,
+            mean_covar=sm.add_constant(train_x),
+            var_covar=sm.add_constant(train_x),
+        )
+
+        pred_mean = sm.add_constant(test_x).dot(mean_beta)
+        pred_std = np.sqrt(np.exp(sm.add_constant(test_x).dot(var_beta)))
+        return pred_mean, pred_std
+    else:
+        raise ValueError("method must be 'qr' or 'vr'")

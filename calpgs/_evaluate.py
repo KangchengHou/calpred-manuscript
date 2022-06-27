@@ -1,11 +1,6 @@
-from pyexpat.errors import XML_ERROR_SYNTAX
-from matplotlib.axis import XAxis
 import numpy as np
 import pandas as pd
-import random
 from scipy import stats
-from sklearn.metrics import r2_score
-import matplotlib.pyplot as plt
 import uncertainty_toolbox as uct
 from tqdm import tqdm
 
