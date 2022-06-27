@@ -120,7 +120,6 @@ def fit_het_linear(y: np.ndarray, mean_covar: np.ndarray, var_covar: np.ndarray)
     assert (mean_covar.shape[0] == n_indiv) & (var_covar.shape[0] == n_indiv)
     # prepend column of 1
     n_mean_params = mean_covar.shape[1]
-    n_var_params = var_covar.shape[1]
 
     def negloglik(params):
         """Evaluate the negative log-likelihood of the model
@@ -722,50 +721,84 @@ def calibrate_adjust(
 
 def calibrate_and_adjust(
     train_x: np.ndarray,
+    train_z: np.ndarray,
     train_y: np.ndarray,
     test_x: np.ndarray,
-    ci: float = 0.9,
-    method="qr",
+    test_z: np.ndarray,
 ):
     """
     Perform the calibration and adjust
-    TODO: fitting a mean + interval model would be more appropriate here.
+    All `1` intercept should be included throughout
 
     Parameters
     ----------
     train_x : np.ndarray
-        (n_indiv, n_cov), intercept should not be included
+        (n_indiv, n_mean_cov)
+    train_z : np.ndarray
+        (n_indiv, n_var_cov)
     train_y : np.ndarray
         (n_indiv, ) phenotype
     test_x : np.ndarray
-        (n_indiv, n_cov) intercept should not be included
-    ci : float
-        target confidence interval, default 0.9, <lower_col> and <upper_col> will be
-        used for calibration
-    method : str
-        method for calibration, 'qr': quantile regression or 'vr': variance regression
+        (n_indiv, n_mean_cov)
+    test_z : np.ndarray
+        (n_indiv, n_var_cov)
     """
-    ci_z = stats.norm.ppf((1 + ci) / 2)
+    mean_beta, var_beta = fit_het_linear(
+        y=train_y,
+        mean_covar=train_x,
+        var_covar=train_z,
+    )
 
-    if method == "qr":
-        alpha = (1 - ci) / 2
-        models = [
-            QuantReg(endog=train_y, exog=sm.add_constant(train_x)).fit(q=q)
-            for q in [alpha, 0.5, 1 - alpha]
-        ]
-        preds = [model.predict(sm.add_constant(test_x)) for model in models]
-        pred_median = preds[1]
-        pred_std = (preds[2] - preds[0]) / (2 * ci_z)
-        return pred_median, pred_std
-    elif method == "vr":
-        mean_beta, var_beta = fit_het_linear(
-            y=train_y,
-            mean_covar=sm.add_constant(train_x),
-            var_covar=sm.add_constant(train_x),
-        )
+    pred_mean = test_x.dot(mean_beta)
+    pred_std = np.sqrt(np.exp(test_z.dot(var_beta)))
+    return pred_mean, pred_std, mean_beta, var_beta
 
-        pred_mean = sm.add_constant(test_x).dot(mean_beta)
-        pred_std = np.sqrt(np.exp(sm.add_constant(test_x).dot(var_beta)))
-        return pred_mean, pred_std
-    else:
-        raise ValueError("method must be 'qr' or 'vr'")
+
+# def calibrate_and_adjust2(
+#     train_x: np.ndarray,
+#     train_y: np.ndarray,
+#     test_x: np.ndarray,
+#     ci: float = 0.9,
+#     method="qr",
+# ):
+#     """
+#     Perform the calibration and adjust
+
+#     Parameters
+#     ----------
+#     train_x : np.ndarray
+#         (n_indiv, n_cov), intercept should not be included
+#     train_y : np.ndarray
+#         (n_indiv, ) phenotype
+#     test_x : np.ndarray
+#         (n_indiv, n_cov) intercept should not be included
+#     ci : float
+#         target confidence interval, default 0.9, <lower_col> and <upper_col> will be
+#         used for calibration
+#     method : str
+#         method for calibration, 'qr': quantile regression or 'vr': variance regression
+#     """
+#     ci_z = stats.norm.ppf((1 + ci) / 2)
+
+#     if method == "qr":
+#         alpha = (1 - ci) / 2
+#         models = [
+#             QuantReg(endog=train_y, exog=sm.add_constant(train_x)).fit(q=q)
+#             for q in [alpha, 0.5, 1 - alpha]
+#         ]
+#         preds = [model.predict(sm.add_constant(test_x)) for model in models]
+#         pred_median = preds[1]
+#         pred_std = (preds[2] - preds[0]) / (2 * ci_z)
+#         return pred_median, pred_std
+#     elif method == "vr":
+#         mean_beta, var_beta = fit_het_linear(
+#             y=train_y,
+#             mean_covar=sm.add_constant(train_x),
+#             var_covar=sm.add_constant(train_x),
+#         )
+
+#         pred_mean = sm.add_constant(test_x).dot(mean_beta)
+#         pred_std = np.sqrt(np.exp(sm.add_constant(test_x).dot(var_beta)))
+#         return pred_mean, pred_std
+#     else:
+#         raise ValueError("method must be 'qr' or 'vr'")
