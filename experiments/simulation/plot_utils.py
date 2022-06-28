@@ -1,5 +1,7 @@
 import matplotlib.colors as mc
 import colorsys
+import numpy as np
+import matplotlib.pyplot as plt
 
 def lighten_boxplot(ax):
     
@@ -25,3 +27,49 @@ def lighten_boxplot(ax):
             line.set_color(col)
             line.set_mfc(col)
             line.set_mec(col)
+            
+def group_boxplot(df, val_col, group_list=None, axes=None, pos_offset=0.0, color="C0"):
+    """Box plots for each group (in each panel)
+    df should contain "group", "subgroup"
+    each group corresponds to a panel, each subgroup corresponds to
+    different x within the panel
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        dataframe containing group, subgroup, `val_col`
+    val_col : str
+        column containing the values
+    """
+    
+    if group_list is None:
+        group_list = df["group"].unique()
+    group_size = np.array(
+        [len(df[df.group == group].subgroup.unique()) for group in group_list]
+    )
+
+    for group_i, group in enumerate(group_list):
+        df_group = df[df.group == group]
+        dict_val = {
+            group: df_tmp[val_col].values
+            for group, df_tmp in df_group.groupby("subgroup")
+        }
+        x = list(dict_val.keys())
+        vals = list(dict_val.values())
+        means = [np.mean(_) for _ in vals]
+        sems = [np.std(_) / np.sqrt(len(_)) for _ in vals]
+        bplot = axes[group_i].boxplot(
+            positions=np.arange(len(vals)) + 1 + pos_offset,
+            x=vals,
+            sym="",
+            widths=0.15,
+            patch_artist=True,
+        )
+        for patch in bplot["boxes"]:
+            patch.set_facecolor(color)
+        axes[group_i].axhline(y=0.9, color="red", lw=0.8, ls="--")
+        axes[group_i].set_xlabel(group)
+        axes[group_i].set_xticks(np.arange(len(vals)) + 1)
+        axes[group_i].set_xticklabels(x)
+
+    axes[0].set_ylabel("Coverage")

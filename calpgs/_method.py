@@ -146,10 +146,9 @@ def fit_het_linear(y: np.ndarray, mean_covar: np.ndarray, var_covar: np.ndarray)
     init_mean_beta = init_mean_model.params
     init_var = np.mean(init_mean_model.resid ** 2)
     init_var_beta = np.array([init_var] + [0.0] * (var_covar.shape[1] - 1))
-
     model = minimize(
         negloglik,
-        [init_mean_beta, init_var_beta],
+        np.concatenate([init_mean_beta, init_var_beta]),
         method="L-BFGS-B",
         options={"maxiter": 1000},
     )
