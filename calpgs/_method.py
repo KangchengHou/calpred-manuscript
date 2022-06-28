@@ -90,7 +90,13 @@ def estimate_het(xy: np.ndarray, covar: np.ndarray, eps: float = 1e-3) -> np.nda
     return model
 
 
-def fit_het_linear(y: np.ndarray, mean_covar: np.ndarray, var_covar: np.ndarray):
+def fit_het_linear(
+    y: np.ndarray,
+    mean_covar: np.ndarray,
+    var_covar: np.ndarray,
+    method: str = "remlscore",
+    return_est_covar: bool = False,
+):
     """Fit a linear regression which allows for heterogeneity in variance
 
     y ~ N(mean_covar * mean_beta, exp(var_covar * var_beta))
@@ -105,6 +111,13 @@ def fit_het_linear(y: np.ndarray, mean_covar: np.ndarray, var_covar: np.ndarray)
     var_covar : np.ndarray
         variance covariates (n_indiv, n_covar)
         intercept should be manually added
+    method: str
+        use which implementation
+        - remlscore (default): use remlscore in statmod package
+        - optim: directly optimize liklihood in scipy
+    return_est_covar : bool
+        if True, return the estimated covariance matrix
+        (Default value = False)
 
     Returns
     -------
@@ -115,46 +128,55 @@ def fit_het_linear(y: np.ndarray, mean_covar: np.ndarray, var_covar: np.ndarray)
     """
     assert y.ndim == 1
     assert (mean_covar.ndim == 2) & (var_covar.ndim == 2)
-    n_indiv = len(y)
 
-    assert (mean_covar.shape[0] == n_indiv) & (var_covar.shape[0] == n_indiv)
-    # prepend column of 1
-    n_mean_params = mean_covar.shape[1]
+    if method == "remlscore":
+        fit = remlscore_wrapper(y=y, X=mean_covar, Z=var_covar)
+        if return_est_covar:
+            return fit
+        else:
+            return fit[0], fit[1]
+    elif method == "optim":
+        assert return_est_covar == False, "return_est_covar is not supported for optim"
+        n_indiv = len(y)
 
-    def negloglik(params):
-        """Evaluate the negative log-likelihood of the model
+        assert (mean_covar.shape[0] == n_indiv) & (var_covar.shape[0] == n_indiv)
+        # prepend column of 1
+        n_mean_params = mean_covar.shape[1]
 
-        Parameters
-        ----------
-        params : _type_
-            pair of np.ndarray mean_beta, var_beta
+        def negloglik(params):
+            """Evaluate the negative log-likelihood of the model
 
-        Returns
-        -------
-        float
-            negative log-likelihood
-        """
+            Parameters
+            ----------
+            params : _type_
+                pair of np.ndarray mean_beta, var_beta
+
+            Returns
+            -------
+            float
+                negative log-likelihood
+            """
+            mean_beta, var_beta = params[:n_mean_params], params[n_mean_params:]
+            mean = mean_covar @ mean_beta
+            var = np.exp(var_covar @ var_beta)
+
+            return (-1) * stats.norm.logpdf(y, loc=mean, scale=np.sqrt(var)).sum()
+
+        # initialize the mean_beta with regression mean
+        # initalize the var_beta with [overall_r2, 0, 0, ...]
+        init_mean_model = sm.OLS(y, mean_covar).fit()
+        init_mean_beta = init_mean_model.params
+        init_var = np.mean(init_mean_model.resid ** 2)
+        init_var_beta = np.array([init_var] + [0.0] * (var_covar.shape[1] - 1))
+        model = minimize(
+            negloglik,
+            np.concatenate([init_mean_beta, init_var_beta]),
+            method="L-BFGS-B",
+            options={"maxiter": 1000},
+        )
+        params = model.x
         mean_beta, var_beta = params[:n_mean_params], params[n_mean_params:]
-        mean = mean_covar @ mean_beta
-        var = np.exp(var_covar @ var_beta)
-
-        return (-1) * stats.norm.logpdf(y, loc=mean, scale=np.sqrt(var)).sum()
-
-    # initialize the mean_beta with regression mean
-    # initalize the var_beta with [overall_r2, 0, 0, ...]
-    init_mean_model = sm.OLS(y, mean_covar).fit()
-    init_mean_beta = init_mean_model.params
-    init_var = np.mean(init_mean_model.resid ** 2)
-    init_var_beta = np.array([init_var] + [0.0] * (var_covar.shape[1] - 1))
-    model = minimize(
-        negloglik,
-        np.concatenate([init_mean_beta, init_var_beta]),
-        method="L-BFGS-B",
-        options={"maxiter": 1000},
-    )
-    params = model.x
-    mean_beta, var_beta = params[:n_mean_params], params[n_mean_params:]
-    return mean_beta, var_beta
+        return mean_beta, var_beta
 
 
 def remlscore_wrapper(y: np.ndarray, X: np.ndarray, Z: np.ndarray):
@@ -176,12 +198,19 @@ def remlscore_wrapper(y: np.ndarray, X: np.ndarray, Z: np.ndarray):
         estimated mean effects
     gamma: np.ndarray
         estimated gamma effects
+    beta_cov: np.ndarray
+        estimated covariance matrix of mean effects
+    gamma_cov: np.ndarray
+        estimated covariance matrix of gamma effects
     """
     if getattr(remlscore_wrapper, "remlscore", None) is None:
         from rpy2.robjects.packages import importr
-        import rpy2.robjects.numpy2ri
+        import rpy2.robjects.numpy2ri as numpy2ri
+        import rpy2.robjects as ro
 
-        rpy2.robjects.numpy2ri.activate()
+        ro.conversion.py2ri = numpy2ri
+
+        numpy2ri.activate()
         statmod = importr("statmod")
         remlscore_wrapper.remlscore = statmod.remlscore  # type: ignore
 
@@ -190,10 +219,12 @@ def remlscore_wrapper(y: np.ndarray, X: np.ndarray, Z: np.ndarray):
     assert Z.ndim == 2
     assert X.shape[0] == Z.shape[0]
     assert len(y) == X.shape[0]
-    fit = remlscore_wrapper.remlscore(y.reshape(-1, 1), X, Z)  # type: ignore
+    fit = remlscore_wrapper.remlscore(y.reshape(-1, 1), X, Z, tol=1e-6, maxit=100)  # type: ignore
     beta = fit.rx2("beta")
     gamma = fit.rx2("gamma")
-    return beta.flatten(), gamma.flatten()
+    beta_cov = fit.rx2("cov.beta")
+    gamma_cov = fit.rx2("cov.gamma")
+    return beta.flatten(), gamma.flatten(), beta_cov, gamma_cov
 
 
 def het_breuschpagan(resid, exog_het, robust=True):
@@ -746,6 +777,8 @@ def calibrate_and_adjust(
         y=train_y,
         mean_covar=train_x,
         var_covar=train_z,
+        method="remlscore",
+        return_est_covar=False,
     )
 
     pred_mean = test_x.dot(mean_beta)
