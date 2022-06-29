@@ -244,7 +244,7 @@ def remlscore_wrapper(y: np.ndarray, X: np.ndarray, Z: np.ndarray):
     beta = fit.rx2("beta")
     gamma = fit.rx2("gamma")
     beta_cov = fit.rx2("cov.beta")
-    gamma_cov = fit.rx2("cov.gamma")
+    gamma_cov = fit.rx2("cov.gam")
     return beta.flatten(), gamma.flatten(), beta_cov, gamma_cov
 
 
