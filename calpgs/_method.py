@@ -129,6 +129,20 @@ def fit_het_linear(
     assert y.ndim == 1
     assert (mean_covar.ndim == 2) & (var_covar.ndim == 2)
 
+    # convert to np.ndarray when possible
+    if isinstance(y, pd.Series):
+        y = y.values
+    if isinstance(mean_covar, pd.DataFrame):
+        mean_covar = mean_covar.values
+    if isinstance(var_covar, pd.DataFrame):
+        var_covar = var_covar.values
+
+    assert (
+        isinstance(y, np.ndarray)
+        & isinstance(mean_covar, np.ndarray)
+        & isinstance(var_covar, np.ndarray)
+    ), "y, mean_covar, var_covar must be np.ndarray"
+
     if method == "remlscore":
         fit = remlscore_wrapper(y=y, X=mean_covar, Z=var_covar)
         if return_est_covar:
@@ -219,6 +233,13 @@ def remlscore_wrapper(y: np.ndarray, X: np.ndarray, Z: np.ndarray):
     assert Z.ndim == 2
     assert X.shape[0] == Z.shape[0]
     assert len(y) == X.shape[0]
+
+    assert (
+        isinstance(y, np.ndarray)
+        & isinstance(X, np.ndarray)
+        & isinstance(Z, np.ndarray)
+    ), "y, X, Z must be np.ndarray"
+
     fit = remlscore_wrapper.remlscore(y.reshape(-1, 1), X, Z, tol=1e-6, maxit=100)  # type: ignore
     beta = fit.rx2("beta")
     gamma = fit.rx2("gamma")
