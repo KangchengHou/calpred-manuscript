@@ -298,15 +298,16 @@ def fit_het_linear(
         if return_est_covar:
             return (
                 fit.rx2("mean_beta"),
-                fit.rx2("var_beta"),
+                fit.rx2("var_beta").flatten(),
                 fit.rx2("slope_beta"),
                 fit.rx2("mean_beta_varcov"),
                 fit.rx2("var_beta_varcov"),
+                fit.rx2("slope_beta_varcov"),
             )
         else:
             return (
                 fit.rx2("mean_beta"),
-                fit.rx2("var_beta"),
+                fit.rx2("var_beta").flatten(),
                 fit.rx2("slope_beta"),
             )
 
