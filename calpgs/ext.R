@@ -5,7 +5,8 @@ fit_het_linear <- function(y,
                            var_covar,
                            slope_covar,
                            tol = 1e-6,
-                           maxit = 500,
+                           maxit1 = 50,
+                           maxit2 = 500,
                            trace = FALSE) {
     # fit y ~ N((mean_covar * mean_beta) (1 + slope_covar * slope_beta),
     # exp(var_covar * var_beta))))
@@ -15,7 +16,7 @@ fit_het_linear <- function(y,
             y = y,
             X = mean_covar,
             Z = var_covar,
-            tol = tol, maxit = maxit
+            tol = tol, maxit = maxit2
         )
         return(list(
             mean_beta = fit$beta,
@@ -26,14 +27,14 @@ fit_het_linear <- function(y,
     } else {
         # coordinate descent to optimize slope_beta
         slope_coef <- rep(0, ncol(slope_covar))
-        for (i in 1:maxit) {
+        for (i in 1:maxit2) {
             slope <- 1 + slope_covar %*% slope_coef
 
             fit <- remlscore(
                 y = y,
                 X = sweep(mean_covar, MARGIN = 1, slope, "*"),
                 Z = var_covar,
-                tol = tol, maxit = maxit
+                tol = tol, maxit = maxit1
             )
             fitted_mu <- mean_covar %*% fit$beta
             fitted_var <- as.vector(exp(var_covar %*% fit$gamma))
@@ -44,23 +45,24 @@ fit_het_linear <- function(y,
                 w = 1 / fitted_var
             )
             # compare with previous iteration
-            if (max(abs(slope_fit$coef - slope_coef)) < tol) {
+            iter_diff <- max(abs(slope_fit$coef - slope_coef))
+            if (iter_diff < tol) {
                 break
             }
             slope_coef <- slope_fit$coef
             if (trace) {
                 cat(paste0(
-                    sprintf("iter %+3s: ", i),
+                    sprintf("Outer iter %+3s: inner iter [%+3s/%d] ", i, fit$iter, maxit1),
                     paste(round(slope_coef, 3), collapse = " "),
-                    "\n"
+                    sprintf(" Error: %.3g\n", iter_diff)
                 ))
             }
         }
 
-        if (i == maxit) {
+        if (i == maxit2) {
             print(paste0(
-                "Maximum number of iterations reached.",
-                " May not have converged. Consider increase maxit."
+                "Maximum number of iterations=", maxit2, " reached.",
+                " May not have converged. Consider increase maxit2."
             ))
         } else {
             print(paste0(
