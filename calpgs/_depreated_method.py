@@ -10,6 +10,8 @@ from statsmodels.regression.quantile_regression import QuantReg
 import warnings
 from typing import List, Dict
 import structlog
+from ._method import multiple_logpdfs
+import matplotlib.pyplot as plt
 
 # def calibrate_and_adjust2(
 #     train_x: np.ndarray,
@@ -198,6 +200,7 @@ def test_het_breuschpagan(
         ax.set_ylabel("Residuals")
 
     return pd.Series(index=names, data=het_test[0:4]), het_test[4]
+
 
 def calibrate_pred(
     df: pd.DataFrame,
@@ -580,6 +583,7 @@ def calibrate_adjust(
     if isinstance(predstd, pd.Series):
         predstd = predstd.values
     return pred, predstd
+
 
 def estimate_het(xy: np.ndarray, covar: np.ndarray, eps: float = 1e-3) -> np.ndarray:
     """
