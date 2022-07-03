@@ -5,7 +5,6 @@ __pycache__/
 out/
 OLD*/
 data-debug/
-data/
 dask-worker-space/
 job_out
 .ipynb_checkpoints/
