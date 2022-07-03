@@ -51,7 +51,7 @@ fit_het_linear <- function(y,
             if (trace) {
                 cat(paste0(
                     sprintf("iter %+3s: ", i),
-                    paste(round(slope_coef, 2), collapse = " "),
+                    paste(round(slope_coef, 3), collapse = " "),
                     "\n"
                 ))
             }
