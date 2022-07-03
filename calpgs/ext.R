@@ -47,12 +47,16 @@ fit_het_linear <- function(y,
                 break
             }
             slope_coef <- slope_fit$coef
-            if (i == maxit) {
-                print(paste0(
-                    "Maximum number of iterations reached.",
-                    " May not have converged. Consider increase maxit."
-                ))
-            }
+        }
+        if (i == maxit) {
+            print(paste0(
+                "Maximum number of iterations reached.",
+                " May not have converged. Consider increase maxit."
+            ))
+        } else {
+            print(paste0(
+                "Optimization converged in ", i, " iterations."
+            ))
         }
         # lm.wfit does not provide vcov matrix, redo the fit using `lm`
         slope_fit <- lm(
