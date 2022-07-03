@@ -5,7 +5,8 @@ fit_het_linear <- function(y,
                            var_covar,
                            slope_covar,
                            tol = 1e-6,
-                           maxit = 500) {
+                           maxit = 500,
+                           trace = FALSE) {
     # fit y ~ N((mean_covar * mean_beta) (1 + slope_covar * slope_beta),
     # exp(var_covar * var_beta))))
     if (missing(slope_covar)) {
@@ -47,7 +48,15 @@ fit_het_linear <- function(y,
                 break
             }
             slope_coef <- slope_fit$coef
+            if (trace) {
+                cat(paste0(
+                    sprintf("iter %+3s: ", i),
+                    paste(round(slope_coef, 2), collapse = " "),
+                    "\n"
+                ))
+            }
         }
+
         if (i == maxit) {
             print(paste0(
                 "Maximum number of iterations reached.",

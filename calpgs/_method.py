@@ -210,6 +210,7 @@ def fit_het_linear(
     var_covar: np.ndarray,
     slope_covar: np.ndarray = None,
     return_est_covar: bool = False,
+    trace=False,
 ):
     """
     Fit a linear regression which allows for heterogeneity in variance
@@ -276,7 +277,7 @@ def fit_het_linear(
 
     if slope_covar is None:
         fit = fit_het_linear.r_ext.fit_het_linear(  # type: ignore
-            y=y.reshape(-1, 1), mean_covar=mean_covar, var_covar=var_covar
+            y=y.reshape(-1, 1), mean_covar=mean_covar, var_covar=var_covar, trace=trace
         )
 
         if return_est_covar:
@@ -294,6 +295,7 @@ def fit_het_linear(
             mean_covar=mean_covar,
             var_covar=var_covar,
             slope_covar=slope_covar,
+            trace=trace
         )
         if return_est_covar:
             return (
