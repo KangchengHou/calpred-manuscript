@@ -441,20 +441,25 @@ def calibrate_and_adjust(
 ):
     """
     Perform the calibration and adjust
-    All `1` intercept should be included throughout
+    All `1` intercept should be included in covariates of mean, var
+    But should not be included in covariates of slope
 
     Parameters
     ----------
-    train_x : np.ndarray
+    train_mean_covar : np.ndarray
         (n_indiv, n_mean_cov)
-    train_z : np.ndarray
+    train_var_covar : np.ndarray
         (n_indiv, n_var_cov)
     train_y : np.ndarray
         (n_indiv, ) phenotype
-    test_x : np.ndarray
+    test_mean_covar : np.ndarray
         (n_indiv, n_mean_cov)
-    test_z : np.ndarray
+    test_var_covar : np.ndarray
         (n_indiv, n_var_cov)
+    train_slope_covar : np.ndarray
+        (n_indiv, n_slope_cov)
+    test_slope_covar : np.ndarray
+        (n_indiv, n_slope_cov)
     """
     assert (train_slope_covar is None) == (test_slope_covar is None)
     fit_slope = train_slope_covar is not None

@@ -72,7 +72,7 @@ def load_trait_info(
     df_trait = pd.merge(df_trait, df_covar, left_index=True, right_index=True)
 
     # restricted to indiv_group
-    if indiv_group == "white_british":
+    if indiv_group == "white":
         df_trait = df_trait[df_trait.group == "United Kingdom"]
     elif indiv_group == "other":
         df_trait = df_trait[~(df_trait.group == "United Kingdom")]

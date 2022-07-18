@@ -92,3 +92,58 @@ def plot_calibration(
     ax.set_xticklabels(group_labels)
     if n_group > 1:
         ax.set_xlabel(group_col)
+
+
+def compare_values(
+    x: np.ndarray,
+    y: np.ndarray,
+    xlabel: str = None,
+    ylabel: str = None,
+    ax=None,
+    s: int = 5,
+):
+    """Compare two p-values.
+    Parameters
+    ----------
+    x_pval: np.ndarray
+        The p-value for the first variable.
+    y_pval: np.ndarray
+        The p-value for the second variable.
+    xlabel: str
+        The label for the first variable.
+    ylabel: str
+        The label for the second variable.
+    ax: matplotlib.Axes
+        A matplotlib axes object to plot on. If None, will create a new one.
+    """
+    if ax is None:
+        ax = plt.gca()
+    if not isinstance(x, np.ndarray):
+        x = np.array(x)
+    if not isinstance(y, np.ndarray):
+        y = np.array(y)
+    nonnan_idx = ~np.isnan(x) & ~np.isnan(y)
+    x, y = x[nonnan_idx], y[nonnan_idx]
+    ax.scatter(x, y, s=s)
+    lim = max(np.nanmax(x), np.nanmax(y)) * 1.1
+    ax.plot([-lim, lim], [-lim, lim], "k--", alpha=0.5, lw=1, label="y=x")
+
+    # add a regression line
+    slope = np.linalg.lstsq(x[:, None], y[:, None], rcond=None)[0].item()
+
+    ax.axline(
+        (0, 0),
+        slope=slope,
+        color="black",
+        ls="--",
+        lw=1,
+        label=f"y={slope:.2f} x",
+    )
+    ax.set_xlim(-lim, lim)
+    ax.set_ylim(-lim, lim)
+
+    ax.legend()
+    if xlabel is not None:
+        ax.set_xlabel(xlabel)
+    if ylabel is not None:
+        ax.set_ylabel(ylabel)
