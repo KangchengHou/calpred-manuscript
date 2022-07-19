@@ -177,8 +177,12 @@ def model(
         Names of the columns containing the slope covariates, separated by `,`.
         If not specified, all covariates columns are used.
     """
+    log_params("model", locals())
+
     # inputs
     df_data = pd.read_csv(df, sep="\t", index_col=0)
+
+    logger.info(f"Load {df_data.shape[0]} individuals and {df_data.shape[1]} columns")
 
     if y is None:
         y_col = df_data.columns[0]
@@ -190,10 +194,19 @@ def model(
         slope_covar_cols = df_data.columns[1:]
 
     mean_covar_vals, var_covar_vals, slope_covar_vals = (
-        sm.add_constant(df_data[mean_covar_cols].values),
-        sm.add_constant(df_data[var_covar_cols].values),
-        df_data[slope_covar_cols].values,
+        sm.add_constant(df_data[mean_covar_cols]),
+        sm.add_constant(df_data[var_covar_cols]),
+        df_data[slope_covar_cols],
     )
+    logger.info(f"Phenotype = '{y_col}'")
+
+    for name, mat in [
+        ("mean", mean_covar_vals),
+        ("variance", var_covar_vals),
+        ("slope", slope_covar_vals),
+    ]:
+        logger.info(f"Estimating {name} using {','.join(mat.columns)}")
+
     fit = calpgs.fit_het_linear(
         y=df_data[y_col].values,
         mean_covar=mean_covar_vals,
@@ -224,10 +237,12 @@ def model(
         },
         index=slope_covar_vals.columns,
     )
-    df_params = pd.concat([df_mean_params, df_var_params, df_slope_params])
-    df_params.to_csv(
-        out + ".params.tsv", sep="\t", index=False, float_format="%.6g", na_rep="NA"
-    )
+    df_params = pd.concat([df_mean_params, df_var_params, df_slope_params], axis=1)
+    df_params.index.name = "param"
+    logger.info("Estimated parameters:")
+    print(df_params)
+    logger.info("Writing model to '{out}'")
+    df_params.to_csv(out, sep="\t", index=True, float_format="%.6g", na_rep="NA")
 
 
 def predict(model: str, df: str, out: str, ci: float = 0.9):
@@ -244,12 +259,17 @@ def predict(model: str, df: str, out: str, ci: float = 0.9):
     out : str
         Path to the output file.
     """
+    log_params("predict", locals())
+
     # inputs
     df_data = pd.read_csv(df, sep="\t", index_col=0)
     assert "const" not in df_data.columns, "'const' column in 'df'"
     df_data["const"] = 1.0
 
     df_params = pd.read_csv(model, sep="\t", index_col=0)
+    logger.info(f"Load model parameters:")
+    print(df_params)
+
     mean_coef = df_params["mean_coef"].dropna()
     var_coef = df_params["var_coef"].dropna()
     slope_coef = df_params["slope_coef"].dropna()
@@ -267,6 +287,9 @@ def predict(model: str, df: str, out: str, ci: float = 0.9):
         },
         index=df_data.index,
     )
+    logger.info(f"Prediction:")
+    print(df_pred)
+    logger.info(f"Writing prediction to '{out}'")
     df_pred.to_csv(out, sep="\t", index=True, float_format="%.6g", na_rep="NA")
 
 
