@@ -4,9 +4,9 @@ import pandas as pd
 import numpy as np
 import structlog
 from ._evaluate import summarize_pred
-import pickle
 import calpgs
-
+import statsmodels.api as sm
+from scipy import stats
 
 logger = structlog.get_logger()
 
@@ -18,7 +18,7 @@ def log_params(name, params):
     )
 
 
-def group_r2(
+def group_stats(
     df,
     y: str,
     pred: str,
@@ -141,14 +141,12 @@ def group_r2(
 
 def model(
     df: str,
-    y: str,
-    pred: str,
-    predstd: str,
     out: str,
-    ci: float = 0.9,
-    ci_method: str = None,
-    mean_adjust_cols: List[str] = None,
-    ci_adjust_cols: List[str] = None,
+    y: str = None,
+    mean_covar: List[str] = None,
+    var_covar: List[str] = None,
+    slope_covar: List[str] = None,
+    verbose: bool = False,
 ):
     """
     Model the relationship between prediction interval and covariates
@@ -156,117 +154,120 @@ def model(
     Parameters
     ----------
     df : str
-        Path to the dataframe containing the data.
+        Path to the dataframe containing the data, deliminated by '\t'. Each row
+        represents information for a single individual. Each row starts with the
+        individual ID, and the remaining columns are phenotype and covariates. By
+        default, the 1st column is individual ID, the 2nd column is phenotype, and
+        all remaining columns are covariates; all covariates are used to fit
+        mean, variance, and slope. Alternatively, use `--mean-covar`, `--var-covar`,
+        and `--slope-covar` to specify the columns to use for mean, variance, and
+        slope. All `1` constant values will be automatically handled.
+    out : str
+        output file, a tab deliminated file will be created
     y : str
-        Name of the column containing the observed phenotype.
-    pred : str
-        Name of the column containing the predicted value.
-    predstd : str
-        Name of the column containing the initial predicted standard deviation.
-    ci: float
-        target confidence interval, default 0.9, <lower_col> and <upper_col> will be used for
-        calibration
-    ci_method: str
-        method for calibration, "scale" or "shift"
-    mean_adjust_colss: List[str]
-        a list of variables to be used for mean adjustment (columns corresponds to
-        variables)
-    ci_adjust_cols: List[str]
-        a list of variables to be used for ci adjustment (columns corresponds to
-        variables)
-    out: str
-        Path to the output pickle file.
+        Name of the column containing the observed phenotype. If not specified,
+        the 1st column is used.
+    mean_covar : List[str]
+        Names of the columns containing the mean covariates, separated by `,`.
+        If not specified, all covariates columns are used.
+    var_covar : List[str]
+        Names of the columns containing the variance covariates, separated by `,`.
+        If not specified, all covariates columns are used.
+    slope_covar : List[str]
+        Names of the columns containing the slope covariates, separated by `,`.
+        If not specified, all covariates columns are used.
     """
     # inputs
-    df_train = pd.read_csv(df, sep="\t", index_col=0)
+    df_data = pd.read_csv(df, sep="\t", index_col=0)
 
-    if isinstance(mean_adjust_cols, str):
-        mean_adjust_cols = [mean_adjust_cols]
-    if mean_adjust_cols is None:
-        mean_adjust_vars = None
-    else:
-        mean_adjust_vars = df_train[mean_adjust_cols]
+    if y is None:
+        y_col = df_data.columns[0]
+    if mean_covar is None:
+        mean_covar_cols = df_data.columns[1:]
+    if var_covar is None:
+        var_covar_cols = df_data.columns[1:]
+    if slope_covar is None:
+        slope_covar_cols = df_data.columns[1:]
 
-    if isinstance(ci_adjust_cols, str):
-        ci_adjust_cols = [ci_adjust_cols]
-    if ci_adjust_cols is None:
-        ci_adjust_vars = None
-    else:
-        ci_adjust_vars = df_train[ci_adjust_cols]
-
-    result_model = calpgs.calibrate_model(
-        y=df_train[y].values,
-        pred=df_train[pred].values,
-        predstd=df_train[predstd].values,
-        ci=ci,
-        ci_method=ci_method,
-        mean_adjust_vars=mean_adjust_vars,
-        ci_adjust_vars=ci_adjust_vars,
+    mean_covar_vals, var_covar_vals, slope_covar_vals = (
+        sm.add_constant(df_data[mean_covar_cols].values),
+        sm.add_constant(df_data[var_covar_cols].values),
+        df_data[slope_covar_cols].values,
+    )
+    fit = calpgs.fit_het_linear(
+        y=df_data[y_col].values,
+        mean_covar=mean_covar_vals,
+        var_covar=var_covar_vals,
+        slope_covar=slope_covar_vals,
+        return_est_covar=True,
+        trace=verbose,
     )
 
-    pickle_out = open(out, "wb")
-    pickle.dump(result_model, pickle_out)
-    pickle_out.close()
+    mean_coef, var_coef, slope_coef, mean_vcov, var_cov, slope_vcov = fit
+    mean_se = np.sqrt(np.diag(mean_vcov))
+    var_se = np.sqrt(np.diag(var_cov))
+    slope_se = np.sqrt(np.diag(slope_vcov))
+
+    df_mean_params = pd.DataFrame(
+        {"mean_coef": mean_coef, "mean_se": mean_se, "mean_z": mean_coef / mean_se},
+        index=mean_covar_vals.columns,
+    )
+    df_var_params = pd.DataFrame(
+        {"var_coef": var_coef, "var_se": var_se, "var_z": var_coef / var_se},
+        index=var_covar_vals.columns,
+    )
+    df_slope_params = pd.DataFrame(
+        {
+            "slope_coef": slope_coef,
+            "slope_se": slope_se,
+            "slope_z": slope_coef / slope_se,
+        },
+        index=slope_covar_vals.columns,
+    )
+    df_params = pd.concat([df_mean_params, df_var_params, df_slope_params])
+    df_params.to_csv(
+        out + ".params.tsv", sep="\t", index=False, float_format="%.6g", na_rep="NA"
+    )
 
 
-def calibrate(
-    model,
-    df: str,
-    pred: str,
-    predstd: str,
-    out: str,
-    mean_adjust_cols: List[str] = None,
-    ci_adjust_cols: List[str] = None,
-):
+def predict(model: str, df: str, out: str, ci: float = 0.9):
     """
-    Adjust prediction and prediction standard deviation according to calibration model
+    Adjust prediction and prediction standard deviation based on the estimated model
 
     Parameters
     ----------
     model : str
-        Path to the pickle file containing the model data.
+        Path to the estimated parameter files generated with `calpgs model`
     df : str
-        Path to the test data.
-    pred : str
-        Name of the column containing the predicted value.
-    predstd : str
-        Name of the column containing the initial predicted standard deviation.
+        Path to the test file, must contain the same columns as the training file used
+        in `calpgs model`
     out : str
         Path to the output file.
-    mean_adjust_cols: List[str]
-        a list of variables to be used for mean adjustment (columns corresponds to
-        variables)
-    ci_adjust_cols: List[str]
-        a list of variables to be used for ci adjustment (columns corresponds to
-        variables)
     """
     # inputs
-    pickle_in = open(model, "rb")
-    model = pickle.load(pickle_in)
-    df_test = pd.read_csv(df, sep="\t", index_col=0)
+    df_data = pd.read_csv(df, sep="\t", index_col=0)
+    assert "const" not in df_data.columns, "'const' column in 'df'"
+    df_data["const"] = 1.0
 
-    if isinstance(mean_adjust_cols, str):
-        mean_adjust_cols = [mean_adjust_cols]
-    if mean_adjust_cols is None:
-        mean_adjust_vars = None
-    else:
-        mean_adjust_vars = df_test[mean_adjust_cols]
+    df_params = pd.read_csv(model, sep="\t", index_col=0)
+    mean_coef = df_params["mean_coef"].dropna()
+    var_coef = df_params["var_coef"].dropna()
+    slope_coef = df_params["slope_coef"].dropna()
 
-    if isinstance(ci_adjust_cols, str):
-        ci_adjust_cols = [ci_adjust_cols]
-    if ci_adjust_cols is None:
-        ci_adjust_vars = None
-    else:
-        ci_adjust_vars = df_test[ci_adjust_cols]
-
-    df_test["cal_prs"], df_test["cal_predstd"] = calpgs.calibrate_adjust(
-        model=model,
-        pred=df_test[pred].values,
-        predstd=df_test[predstd].values,
-        mean_adjust_vars=mean_adjust_vars,
-        ci_adjust_vars=ci_adjust_vars,
+    pred_slope = 1 + np.dot(df_data[slope_coef.index].values, slope_coef)
+    pred_mean = np.dot(df_data[mean_coef.index].values, mean_coef) * pred_slope
+    pred_std = np.sqrt(np.exp(np.dot(df_data[var_coef.index].values, var_coef)))
+    ci_z = stats.norm.ppf((1 + ci) / 2)
+    df_pred = pd.DataFrame(
+        {
+            "mean": pred_mean,
+            "std": pred_std,
+            "lower": pred_mean - pred_std * ci_z,
+            "upper": pred_mean + pred_std * ci_z,
+        },
+        index=df_data.index,
     )
-    df_test.to_csv(out, sep="\t", index=False)
+    df_pred.to_csv(out, sep="\t", index=True, float_format="%.6g", na_rep="NA")
 
 
 def cli():

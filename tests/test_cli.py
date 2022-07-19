@@ -6,13 +6,13 @@ import pandas as pd
 import numpy as np
 
 
-def test_group_r2():
+def test_group_stats():
     toy_data = os.path.join(calpgs.get_data_folder(), "toy.tsv")
 
     tmp_dir = tempfile.TemporaryDirectory()
     out_path = tmp_dir.name + "result"
     cmds = [
-        "calpgs group-r2",
+        "calpgs group-stats",
         f"--df {toy_data}",
         "--y y_cov",
         "--pred prs",
