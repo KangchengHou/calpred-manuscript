@@ -1,15 +1,9 @@
 import numpy as np
 import pandas as pd
 from scipy import stats
-import uncertainty_toolbox as uct
 from tqdm import tqdm
 
 
-def uct_metrics(pred_mean, pred_std, y):
-
-    # Compute all uncertainty metrics
-    metrics = uct.metrics.get_all_metrics(pred_mean, pred_std, y)
-    return metrics
 
 
 def summarize_pred(
