@@ -146,6 +146,7 @@ def model(
     mean_covar: List[str] = None,
     var_covar: List[str] = None,
     slope_covar: List[str] = None,
+    fit_intercept: bool = False,
     verbose: bool = False,
 ):
     """
@@ -221,10 +222,22 @@ def model(
         var_covar=var_covar_vals,
         slope_covar=slope_covar_vals,
         return_est_covar=True,
+        fit_intercept=fit_intercept,
         trace=verbose,
     )
-
-    mean_coef, var_coef, slope_coef, mean_vcov, var_cov, slope_vcov = fit
+    if fit_intercept:
+        (
+            mean_coef,
+            var_coef,
+            slope_coef,
+            intercept_coef,
+            mean_vcov,
+            var_cov,
+            slope_vcov,
+            intercept_vcov,
+        ) = fit
+    else:
+        mean_coef, var_coef, slope_coef, mean_vcov, var_cov, slope_vcov = fit
     mean_se = np.sqrt(np.diag(mean_vcov))
     var_se = np.sqrt(np.diag(var_cov))
     slope_se = np.sqrt(np.diag(slope_vcov))
@@ -245,7 +258,15 @@ def model(
         },
         index=slope_covar_vals.columns,
     )
+
     df_params = pd.concat([df_mean_params, df_var_params, df_slope_params], axis=1)
+    if fit_intercept:
+        df_intercept_params = pd.DataFrame(
+            {"intercept_coef": intercept_coef, "intercept_se": np.diag(intercept_vcov)},
+            index=["const"],
+        )
+        df_params = pd.concat([df_params, df_intercept_params], axis=1)
+
     df_params.index.name = "param"
     logger.info("Estimated parameters:")
     print(df_params)

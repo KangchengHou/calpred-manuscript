@@ -210,6 +210,7 @@ def fit_het_linear(
     var_covar: np.ndarray,
     slope_covar: np.ndarray = None,
     return_est_covar: bool = False,
+    fit_intercept: bool = False,
     trace=False,
 ):
     """
@@ -234,6 +235,12 @@ def fit_het_linear(
         all `1` intercept should NOT be present
     return_est_covar : bool
         if True, return the estimated covariance matrix
+        (Default value = False)
+    fit_intercept : bool
+        if True, fit a global intercept parameter to the mean, the fitted intercept
+        will be stored in the first element of the slope_beta and slope_beta_varcov
+        when applied, this intercept should be added as a global intercept, rather than
+        as applied to calculating slope.
         (Default value = False)
 
     Returns
@@ -276,6 +283,9 @@ def fit_het_linear(
     ), "y, mean_covar, var_covar must be np.ndarray"
 
     if slope_covar is None:
+        assert (
+            fit_intercept is False
+        ), "fit_intercept must be False if slope_covar is None"
         fit = fit_het_linear.r_ext.fit_het_linear(  # type: ignore
             y=y.reshape(-1, 1), mean_covar=mean_covar, var_covar=var_covar, trace=trace
         )
@@ -290,28 +300,56 @@ def fit_het_linear(
         else:
             return fit.rx2("mean_beta"), fit.rx2("var_beta").flatten()
     else:
-        fit = fit_het_linear.r_ext.fit_het_linear(  # type: ignore
-            y=y.reshape(-1, 1),
-            mean_covar=mean_covar,
-            var_covar=var_covar,
-            slope_covar=slope_covar,
-            trace=trace,
-        )
-        if return_est_covar:
-            return (
-                fit.rx2("mean_beta"),
-                fit.rx2("var_beta").flatten(),
-                fit.rx2("slope_beta"),
-                fit.rx2("mean_beta_varcov"),
-                fit.rx2("var_beta_varcov"),
-                fit.rx2("slope_beta_varcov"),
+        if fit_intercept:
+            fit = fit_het_linear.r_ext.fit_het_linear(  # type: ignore
+                y=y.reshape(-1, 1),
+                mean_covar=mean_covar,
+                var_covar=var_covar,
+                slope_covar=slope_covar,
+                intercept_covar=np.ones((mean_covar.shape[0], 1)),
+                trace=trace,
             )
+            if return_est_covar:
+                return (
+                    fit.rx2("mean_beta"),
+                    fit.rx2("var_beta").flatten(),
+                    fit.rx2("slope_beta"),
+                    fit.rx2("intercept_beta"),
+                    fit.rx2("mean_beta_varcov"),
+                    fit.rx2("var_beta_varcov"),
+                    fit.rx2("slope_beta_varcov"),
+                    fit.rx2("intercept_beta_varcov"),
+                )
+            else:
+                return (
+                    fit.rx2("mean_beta"),
+                    fit.rx2("var_beta").flatten(),
+                    fit.rx2("slope_beta"),
+                    fit.rx2("intercept_beta"),
+                )
         else:
-            return (
-                fit.rx2("mean_beta"),
-                fit.rx2("var_beta").flatten(),
-                fit.rx2("slope_beta"),
+            fit = fit_het_linear.r_ext.fit_het_linear(  # type: ignore
+                y=y.reshape(-1, 1),
+                mean_covar=mean_covar,
+                var_covar=var_covar,
+                slope_covar=slope_covar,
+                trace=trace,
             )
+            if return_est_covar:
+                return (
+                    fit.rx2("mean_beta"),
+                    fit.rx2("var_beta").flatten(),
+                    fit.rx2("slope_beta"),
+                    fit.rx2("mean_beta_varcov"),
+                    fit.rx2("var_beta_varcov"),
+                    fit.rx2("slope_beta_varcov"),
+                )
+            else:
+                return (
+                    fit.rx2("mean_beta"),
+                    fit.rx2("var_beta").flatten(),
+                    fit.rx2("slope_beta"),
+                )
 
 
 def calibrate_and_adjust(
