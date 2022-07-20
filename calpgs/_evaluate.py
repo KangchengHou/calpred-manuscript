@@ -4,9 +4,7 @@ from scipy import stats
 from tqdm import tqdm
 
 
-
-
-def summarize_pred(
+def compute_group_stats(
     df: pd.DataFrame,
     y_col: str,
     pred_col: str,
@@ -18,8 +16,8 @@ def summarize_pred(
     return_r2_diff=False,
 ):
     """
-    Summarize the results of prediction, produce R2, coverage, interval length for
-        different groups.
+    Summarize the results of prediction:
+    with R2, coverage, interval length for different groups.
 
     Parameters
     ----------
@@ -114,7 +112,7 @@ def summarize_pred(
         for _ in tqdm(range(n_bootstrap), desc="Bootstrapping"):
             # sample with replacement
             bootstrap_dfs.append(
-                summarize_pred(
+                compute_group_stats(
                     df.sample(frac=1, replace=True),
                     y_col,
                     pred_col,
@@ -131,8 +129,8 @@ def summarize_pred(
         else:
             df_res_se = pd.DataFrame(
                 np.dstack(bootstrap_dfs).std(axis=2),
-                index=df_res.index,
-                columns=df_res.columns,
+                index=df_res.index,  # type: ignore
+                columns=df_res.columns,  # type: ignore
             )
         if (group_col is not None) and return_r2_diff:
             r2_diff = np.array(

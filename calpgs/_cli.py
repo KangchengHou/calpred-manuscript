@@ -3,7 +3,7 @@ from typing import Union, List
 import pandas as pd
 import numpy as np
 import structlog
-from ._evaluate import summarize_pred
+from ._evaluate import compute_group_stats
 import calpgs
 import statsmodels.api as sm
 from scipy import stats
@@ -84,7 +84,7 @@ def group_stats(
             df_col_cat.insert(0, "group", col)
             df_cat.append(df_col_cat)
             df_tmp[col] = cat_var.cat.codes
-        df_res, df_res_se, r2_diff = summarize_pred(
+        df_res, df_res_se, r2_diff = compute_group_stats(
             df_tmp,
             y_col=y,
             pred_col=pred,
