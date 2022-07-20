@@ -186,12 +186,20 @@ def model(
 
     if y is None:
         y_col = df_data.columns[0]
+    else:
+        y_col = y
     if mean_covar is None:
-        mean_covar_cols = df_data.columns[1:]
+        mean_covar_cols = [col for col in df_data.columns if col != y_col]
+    else:
+        mean_covar_cols = mean_covar
     if var_covar is None:
-        var_covar_cols = df_data.columns[1:]
+        var_covar_cols = [col for col in df_data.columns if col != y_col]
+    else:
+        var_covar_cols = var_covar
     if slope_covar is None:
-        slope_covar_cols = df_data.columns[1:]
+        slope_covar_cols = [col for col in df_data.columns if col != y_col]
+    else:
+        slope_covar_cols = slope_covar
 
     mean_covar_vals, var_covar_vals, slope_covar_vals = (
         sm.add_constant(df_data[mean_covar_cols]),
@@ -241,7 +249,7 @@ def model(
     df_params.index.name = "param"
     logger.info("Estimated parameters:")
     print(df_params)
-    logger.info("Writing model to '{out}'")
+    logger.info(f"Writing model to '{out}'")
     df_params.to_csv(out, sep="\t", index=True, float_format="%.6g", na_rep="NA")
 
 
@@ -288,7 +296,7 @@ def predict(model: str, df: str, out: str, ci: float = 0.9):
         index=df_data.index,
     )
     logger.info(f"Prediction:")
-    print(df_pred)
+    print(df_pred.head())
     logger.info(f"Writing prediction to '{out}'")
     df_pred.to_csv(out, sep="\t", index=True, float_format="%.6g", na_rep="NA")
 
