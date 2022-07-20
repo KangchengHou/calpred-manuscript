@@ -1,5 +1,28 @@
 library(statmod)
 
+calc_nll <- function(y,
+                     mean_covar,
+                     var_covar,
+                     slope_covar,
+                     mean_coef,
+                     var_coef,
+                     slope_coef,
+                     intercept_covar = NULL,
+                     intercept_coef = NULL) {
+    # Calculate the negative log-likelihood of the data
+    # given the current estimates
+    if (is.null(intercept_covar)) {
+        stopifnot(is.null(intercept_coef))
+    }
+    fitted_mean <- mean_covar %*% mean_coef
+    fitted_var <- as.vector(exp(var_covar %*% var_coef))
+    fitted_mean <- fitted_mean * (1 + slope_covar %*% slope_coef)
+    if (!is.null(intercept_covar)) {
+        fitted_mean <- fitted_mean + intercept_covar %*% intercept_coef
+    }
+    loglik <- dnorm(y, mean = fitted_mean, sd = sqrt(fitted_var), log = TRUE)
+    return((-1) * sum(loglik))
+}
 fit_het_linear <- function(y,
                            mean_covar,
                            var_covar,
@@ -50,6 +73,15 @@ fit_het_linear <- function(y,
                 break
             }
             slope_coef <- slope_fit$coef
+            nll <- calc_nll(
+                y = y,
+                mean_covar = mean_covar,
+                var_covar = var_covar,
+                slope_covar = slope_covar,
+                mean_coef = fit$beta,
+                var_coef = fit$gamma,
+                slope_coef = slope_coef,
+            )
             if (trace) {
                 cat(paste0(
                     sprintf(
@@ -57,7 +89,8 @@ fit_het_linear <- function(y,
                         i, fit$iter, maxit1
                     ),
                     paste(round(slope_coef, 3), collapse = " "),
-                    sprintf(" Error: %.3g\n", iter_diff)
+                    sprintf(" Error: %.3g", iter_diff),
+                    sprintf(" NLL: %.2f\n", nll)
                 ))
             }
         }
@@ -145,6 +178,15 @@ fit_het_linear_intercept <- function(y,
         slope_coef <- intercept_slope_fit$coef[
             (n_intercept_covar + 1):(n_intercept_covar + n_slope_covar)
         ]
+        nll <- calc_nll(
+            y = y,
+            mean_covar = mean_covar,
+            var_covar = var_covar,
+            slope_covar = slope_covar,
+            mean_coef = fit$beta,
+            var_coef = fit$gamma,
+            slope_coef = slope_coef,
+        )
 
         if (trace) {
             cat(paste0(
@@ -153,7 +195,8 @@ fit_het_linear_intercept <- function(y,
                     i, fit$iter, maxit1
                 ),
                 paste(round(intercept_slope_fit$coef, 3), collapse = " "),
-                sprintf(" Error: %.3g\n", iter_diff)
+                sprintf(" Error: %.3g", iter_diff),
+                sprintf(" NLL: %.2f\n", nll)
             ))
         }
     }
