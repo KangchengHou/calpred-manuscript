@@ -261,8 +261,10 @@ def model(
 
     df_params = pd.concat([df_mean_params, df_var_params, df_slope_params], axis=1)
     if fit_intercept:
+        print(intercept_coef, intercept_vcov)
+        intercept_se = np.sqrt(np.diag(intercept_vcov))
         df_intercept_params = pd.DataFrame(
-            {"intercept_coef": intercept_coef, "intercept_se": np.diag(intercept_vcov)},
+            {"intercept_coef": intercept_coef, "intercept_se": intercept_se},
             index=["const"],
         )
         df_params = pd.concat([df_params, df_intercept_params], axis=1)
@@ -305,6 +307,9 @@ def predict(model: str, df: str, out: str, ci: float = 0.9):
 
     pred_slope = 1 + np.dot(df_data[slope_coef.index].values, slope_coef)
     pred_mean = np.dot(df_data[mean_coef.index].values, mean_coef) * pred_slope
+    if "intercept_coef" in df_params.columns:
+        intercept_coef = df_params["intercept_coef"].dropna()
+        pred_mean += np.dot(df_data[intercept_coef.index].values, intercept_coef)
     pred_std = np.sqrt(np.exp(np.dot(df_data[var_coef.index].values, var_coef)))
     ci_z = stats.norm.ppf((1 + ci) / 2)
     df_pred = pd.DataFrame(
@@ -316,7 +321,7 @@ def predict(model: str, df: str, out: str, ci: float = 0.9):
         },
         index=df_data.index,
     )
-    logger.info(f"Prediction:")
+    logger.info(f"Prediction for first 5 individuals:")
     print(df_pred.head())
     logger.info(f"Writing prediction to '{out}'")
     df_pred.to_csv(out, sep="\t", index=True, float_format="%.6g", na_rep="NA")

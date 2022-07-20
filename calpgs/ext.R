@@ -105,6 +105,11 @@ fit_het_linear_intercept <- function(y,
     # fit y ~ N((mean_covar * mean_beta) (1 + slope_covar * slope_beta),
     # exp(var_covar * var_beta))))
     # coordinate descent to optimize slope_beta
+    n_indiv <- nrow(mean_covar)
+    stopifnot(all(c(
+        nrow(mean_covar), nrow(var_covar),
+        nrow(slope_covar), nrow(intercept_covar)
+    ) == n_indiv[1]))
     n_slope_covar <- ncol(slope_covar)
     n_intercept_covar <- ncol(intercept_covar)
     slope_coef <- rep(0, n_slope_covar)
@@ -189,11 +194,13 @@ fit_het_linear_intercept <- function(y,
         var_beta_varcov = fit$cov.gam,
         slope_beta_varcov = intercept_slope_vcov[
             (n_intercept_covar + 1):(n_intercept_covar + n_slope_covar),
-            (n_intercept_covar + 1):(n_intercept_covar + n_slope_covar)
+            (n_intercept_covar + 1):(n_intercept_covar + n_slope_covar),
+            drop = FALSE
         ],
         intercept_beta_varcov = intercept_slope_vcov[
             1:n_intercept_covar,
-            1:n_intercept_covar
-        ],
+            1:n_intercept_covar,
+            drop = FALSE
+        ]
     ))
 }

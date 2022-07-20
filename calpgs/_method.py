@@ -301,7 +301,7 @@ def fit_het_linear(
             return fit.rx2("mean_beta"), fit.rx2("var_beta").flatten()
     else:
         if fit_intercept:
-            fit = fit_het_linear.r_ext.fit_het_linear(  # type: ignore
+            fit = fit_het_linear.r_ext.fit_het_linear_intercept(  # type: ignore
                 y=y.reshape(-1, 1),
                 mean_covar=mean_covar,
                 var_covar=var_covar,
