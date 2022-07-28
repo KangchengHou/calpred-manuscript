@@ -4,6 +4,7 @@ submitit-logs/
 __pycache__/
 out/
 OLD*/
+OLD-*
 data-debug/
 dask-worker-space/
 job_out

@@ -261,7 +261,6 @@ def model(
 
     df_params = pd.concat([df_mean_params, df_var_params, df_slope_params], axis=1)
     if fit_intercept:
-        print(intercept_coef, intercept_vcov)
         intercept_se = np.sqrt(np.diag(intercept_vcov))
         df_intercept_params = pd.DataFrame(
             {"intercept_coef": intercept_coef, "intercept_se": intercept_se},
