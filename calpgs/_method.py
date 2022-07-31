@@ -382,6 +382,19 @@ def calibrate_and_adjust(
         (n_indiv, n_slope_cov)
     test_slope_covar : np.ndarray
         (n_indiv, n_slope_cov)
+
+    Returns
+    -------
+    pred_mean : np.ndarray
+        (n_indiv, ) predicted mean
+    pred_std : np.ndarray
+        (n_indiv, ) predicted standard deviation
+    mean_beta : np.ndarray
+        (n_mean_cov, ) mean beta
+    var_beta : np.ndarray
+        (n_var_cov, ) var beta
+    slope_beta : np.ndarray
+        (n_slope_cov, ) slope beta
     """
     assert (train_slope_covar is None) == (test_slope_covar is None)
     fit_slope = train_slope_covar is not None
