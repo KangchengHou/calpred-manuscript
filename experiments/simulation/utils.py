@@ -6,7 +6,9 @@ from sklearn.model_selection import train_test_split
 import calpgs
 from typing import List
 import statsmodels.api as sm
-
+import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+from matplotlib.lines import Line2D
 
 def lighten_boxplot(ax):
 
@@ -175,8 +177,11 @@ def evaluate_metrics(
     test_x = sm.add_constant(df_test[["pred"]])
     test_z = sm.add_constant(df_test[adjust_cols])
 
-    if fit_slope:
-        train_slope_covar, test_slope_covar = train_z.values, test_z.values
+    if fit_slope and (len(adjust_cols) > 0):
+        train_slope_covar, test_slope_covar = (
+            train_z.values[:, 1:],
+            test_z.values[:, 1:],
+        )
     else:
         train_slope_covar, test_slope_covar = None, None
 
@@ -192,14 +197,18 @@ def evaluate_metrics(
     )
     df_params = pd.concat(
         [
-            pd.Series(res[2], index=train_x.columns, name="beta"),
-            pd.Series(res[3], index=train_z.columns, name="gamma"),
-        ],
-        axis=1,
+            pd.Series(res[2], index=[col + ".beta" for col in train_x.columns]),
+            pd.Series(res[3], index=[col + ".gamma" for col in train_z.columns]),
+        ]
     )
-    if fit_slope:
+    if fit_slope and (len(adjust_cols) > 0):
         df_params = pd.concat(
-            [df_params, pd.Series(res[4], index=train_z.columns, name="slope")], axis=1
+            [
+                df_params,
+                pd.Series(
+                    res[4], index=[col + ".slope" for col in train_z.columns[1:]]
+                ),
+            ]
         )
     df_test["cal_pred"], df_test["cal_predstd"] = res[0:2]
 
@@ -220,4 +229,54 @@ def evaluate_metrics(
                 dict_coverage[f"{group_col}_{i}"] = df_summary["coverage"][i]
                 dict_r2[f"{group_col}_{i}"] = df_summary["r2"][i]
 
-    return pd.Series(dict_coverage), pd.Series(dict_r2)
+    return pd.Series(dict_coverage), pd.Series(dict_r2), df_params
+
+
+def multi_group_plot_wrapper(df_stats, groups, colors, labels, pos_offset=0.2, ylim=(0.81, 0.99), legend_bbox_to_anchor = (0.5, 0.96)):
+    n_group = len(groups)
+    assert (len(colors) == n_group) and (len(labels) == n_group)
+    df_plot = df_stats[
+        (df_stats["adjust"].isin(groups))
+    ].copy()
+    df_plot["group"] = df_plot["col"].apply(lambda x: x.split("_")[0])
+    df_plot["group"] = df_plot["group"].replace(
+        {"marginal": "Overall", "SEX": "Sex", "AGE": "Age"}
+    )
+    df_plot["subgroup"] = df_plot["col"].apply(
+        lambda x: x.rsplit("_", 1)[1] if "_" in x else ""
+    )
+
+    fig, axes = plt.subplots(
+        figsize=(7, 2.2),
+        ncols=4,
+        sharey=True,
+        gridspec_kw={"width_ratios": np.array([1, 5, 2, 5]) + 3},
+        dpi=150,
+    )
+
+    for i, group in enumerate(groups):
+        group_boxplot(
+            df_plot[df_plot["adjust"] == group],
+            val_col="coverage",
+            group_list=["Overall", "Age", "Sex", "PC1"],
+            pos_offset=-pos_offset * (len(groups) - 1) / 2 + pos_offset * i,
+            axes=axes,
+            color=colors[i],
+        )
+
+    legend_elements = [
+        Patch(facecolor=color, edgecolor="k", label=label)
+        for color, label in zip(colors, labels)
+    ]
+    axes[0].set_ylim(ylim)
+
+    # Create the figure
+    fig.legend(
+        handles=legend_elements,
+        loc="center",
+        ncol=len(groups),
+        bbox_to_anchor=legend_bbox_to_anchor,
+        fontsize=8,
+        frameon=False,
+    )
+    return fig, axes
