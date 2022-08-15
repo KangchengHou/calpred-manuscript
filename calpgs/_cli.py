@@ -55,7 +55,7 @@ def group_stats(
     """
 
     np.random.seed(seed)
-    log_params("group-r2", locals())
+    log_params("group-stats", locals())
     df = pd.read_csv(df, sep="\t", index_col=0)
     n_raw = df.shape[0]
     df.dropna(subset=[y, pred], inplace=True)
@@ -74,7 +74,8 @@ def group_stats(
         if predstd is not None:
             subset_cols.append(predstd)
         df_tmp = df[subset_cols].dropna()
-        n_unique = len(np.unique(df_tmp[col].values))
+        unique_values = np.unique(df_tmp[col].values)
+        n_unique = len(unique_values)
         if n_unique > n_subgroup:
             logger.info(f"Converting column '{col}' to {n_subgroup} quintiles")
             cat_var = pd.qcut(df_tmp[col], q=n_subgroup, duplicates="drop")
@@ -83,7 +84,11 @@ def group_stats(
             )
             df_col_cat.insert(0, "group", col)
             df_cat.append(df_col_cat)
+
             df_tmp[col] = cat_var.cat.codes
+        else:
+            logger.info(f"Column '{col}' has {n_unique} unique values: {unique_values}")
+
         df_res, df_res_se, r2_diff = compute_group_stats(
             df_tmp,
             y_col=y,
@@ -129,7 +134,7 @@ def group_stats(
 
     pd.concat(df_r2).to_csv(out + ".r2.tsv", sep="\t", index=False, float_format="%.6g")
     pd.DataFrame(df_diff, columns=["group", "r2diff", "prob>0", "zscore"]).to_csv(
-        out + ".r2diff.tsv", sep="\t", index=False, float_format="%.6g"
+        out + ".r2diff.tsv", sep="\t", index=False, float_format="%.6g", na_rep="NA"
     )
     if len(df_cat) > 0:
         pd.concat(df_cat).to_csv(out + ".cat.tsv", sep="\t", index=False)

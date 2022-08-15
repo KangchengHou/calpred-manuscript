@@ -80,8 +80,8 @@ def compare_values(
     nonnan_idx = ~np.isnan(x) & ~np.isnan(y)
     x, y = x[nonnan_idx], y[nonnan_idx]
     ax.scatter(x, y, s=s)
-    lim = max(np.nanmax(x), np.nanmax(y)) * 1.1
-    ax.plot([-lim, lim], [-lim, lim], "k--", alpha=0.5, lw=1, label="y=x")
+    lim = max(np.nanmax(np.abs(x)), np.nanmax(np.abs(y))) * 1.1
+    ax.axline((0, 0), slope=1, color="k", ls="--", alpha=0.5, lw=1, label="y=x")
 
     # add a regression line
     slope = np.linalg.lstsq(x[:, None], y[:, None], rcond=None)[0].item()

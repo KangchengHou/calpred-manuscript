@@ -51,17 +51,18 @@ def compute_group_stats(
     # dropping rows with missing values
     df = df[val_cols].dropna()
 
+    # cor_func check whether only 1 value is present.
     if cor == "pearson":
-        cor_func = stats.pearsonr
+        cor_func = lambda x, y: stats.pearsonr(x, y)[0] if len(x) > 1 else np.nan
     elif cor == "spearman":
-        cor_func = stats.spearmanr
+        cor_func = lambda x, y: stats.spearmanr(x, y)[0] if len(x) > 1 else np.nan
     else:
         raise ValueError(f"cor must be pearson or spearman, got {cor}")
+
     ci_z = stats.norm.ppf((1 + ci) / 2)
     if group_col is not None:
         df_grouped = df.groupby(group_col)
-        r2 = df_grouped.apply(lambda df: cor_func(df[pred_col], df[y_col])[0] ** 2)
-
+        r2 = df_grouped.apply(lambda df: cor_func(df[pred_col], df[y_col]) ** 2)
         y_std = df_grouped.apply(lambda df: df[y_col].std())
         pred_std = df_grouped.apply(lambda df: df[pred_col].std())
         df_res = {
@@ -84,7 +85,7 @@ def compute_group_stats(
             )
         df_res = pd.DataFrame(df_res)
     else:
-        r2 = cor_func(df[pred_col], df[y_col])[0] ** 2
+        r2 = cor_func(df[pred_col], df[y_col]) ** 2
         y_std = df[y_col].std()
         pred_std = df[pred_col].std()
 
@@ -127,6 +128,8 @@ def compute_group_stats(
                 np.dstack(bootstrap_dfs).std(axis=2).flatten(), index=df_res.index
             )
         else:
+            # make sure bootstrap dataframe has the same index with the original dataframe
+            bootstrap_dfs = [d.reindex(df_res.index) for d in bootstrap_dfs]
             df_res_se = pd.DataFrame(
                 np.dstack(bootstrap_dfs).std(axis=2),
                 index=df_res.index,  # type: ignore
