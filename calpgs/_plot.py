@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.transforms as mtrans
-from typing import Dict
+from typing import Dict, List
 
 
 def plot_calibration(
@@ -227,3 +227,105 @@ def plot_r2_heatmap(
         spine.set_visible(True)
 
     return fig, ax
+
+
+def plot_r2_cov(
+    dict_r2: Dict,
+    dict_cov1: Dict,
+    dict_cov2: Dict,
+    trait: str,
+    xlabels: List,
+    xlabel_map: Dict,
+    ylim_r2: List = None,
+    ylim_cov: List = None,
+    figsize=None,
+):
+    """
+    Plot the figure for both R2 and coverages as a function of covariates.
+
+    Parameters
+    ----------
+    dict_r2: Dict [group -> pd.DataFrame]
+        for each group [n_group, 2] / [n_group, 1]
+        [n_group, 2]: 1st column: R2, 2nd column: standard error
+        [n_group, 1]: 1st column: R2
+        similarly for dict_cov1 and dict_cov2
+    dict_cov1: Dict[group -> np.ndarray]
+        each group corresponds to a coverage matrix measuring overall calibration
+    dict_cov2: Dict[group -> np.ndarray]
+        each group corresponds to a coverage matrix measureing by-covariate calibration
+    trait: str
+        trait name, used for labels.
+    """
+    width_ratios = [dict_r2[x].shape[0] for x in xlabels]
+    if figsize is None:
+        figsize = (0.3 * sum(width_ratios) + 0.1 * len(width_ratios), 3.5)
+        print("Default figsize:", figsize)
+    fig, axes = plt.subplots(
+        figsize=figsize,
+        dpi=150,
+        nrows=2,
+        ncols=len(xlabels),
+        sharex="col",
+        sharey="row",
+        gridspec_kw={"width_ratios": width_ratios},
+    )
+    for i, group in enumerate(xlabels):
+        ax = axes[0, i]
+        df_r2 = dict_r2[group]
+        n_group = df_r2.shape[0]
+        if df_r2.shape[1] == 2:
+            mean, sd = df_r2.iloc[:, 0], df_r2.iloc[:, 1]
+        else:
+            mean = df_r2.iloc[:, 0]
+            sd = np.zeros(n_group)
+
+        ax.errorbar(
+            x=np.arange(n_group),
+            y=mean,
+            yerr=sd,
+            fmt=".--",
+            ms=4,
+            mew=1,
+            linewidth=1,
+            color="black",
+        )
+        ax.set_xlim(-0.5, n_group - 0.5)
+        if ylim_r2 is not None:
+            ax.set_ylim(*ylim_r2)
+        if i == 0:
+            ax.set_ylabel(f"{trait} $R^2$")
+
+    # coverage
+    for i, group in enumerate(xlabels):
+        ax = axes[1, i]
+
+        ax.axhline(y=0.9, ls="--", lw=1.0, color="black", alpha=0.5)
+        if ylim_cov is not None:
+            ax.set_ylim(*ylim_cov)
+        if i == 0:
+            ax.set_ylabel(f"{trait} coverage")
+
+        for cov_i, dict_cov in enumerate([dict_cov1, dict_cov2]):
+            cov_vals = dict_cov[group].values
+            if cov_vals.shape[1] == 2:
+                cov_mean, cov_sd = cov_vals[:, 0], cov_vals[:, 1]
+            else:
+                cov_mean = cov_vals[:, 0]
+                cov_sd = np.zeros(cov_mean.shape)
+            n_group = cov_vals.shape[0]
+            label = ["Overall", "By-cov"][cov_i]
+            ax.errorbar(
+                x=np.arange(n_group) - 0.1 + cov_i * 0.2,
+                y=cov_mean,
+                yerr=cov_sd,
+                fmt=".--",
+                ms=4,
+                mew=1,
+                linewidth=0.8,
+                label=label,
+            )
+        ax.set_xticks(np.arange(n_group))
+        ax.set_xlabel(xlabel_map[group])
+
+    return fig, axes
