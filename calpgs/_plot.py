@@ -168,7 +168,16 @@ def plot_heatmap(
 
 
 def plot_r2_heatmap(
-    df_val: pd.DataFrame, df_annot: pd.DataFrame, cbar_pad=0.04, cbar_fraction=0.0188
+    df_val: pd.DataFrame,
+    df_annot: pd.DataFrame,
+    cbar_pad=0.04,
+    cbar_fraction=0.0188,
+    squaresize=45,
+    heatmap_vmin=-0.5,
+    heatmap_vmax=0.5,
+    heatmap_linecolor="white",
+    heatmap_linewidths=1.0,
+    dpi=150,
 ):
     """Plot heatmap of variable R2
 
@@ -192,11 +201,11 @@ def plot_r2_heatmap(
         df_annot=df_annot,
         annot_kws={"fontsize": 6, "weight": "bold"},
         cmap=plt.get_cmap("bwr", 11),
-        squaresize=45,
-        heatmap_vmin=-0.5,
-        heatmap_vmax=0.5,
-        heatmap_linecolor="white",
-        heatmap_linewidths=1.0,
+        squaresize=squaresize,
+        heatmap_vmin=heatmap_vmin,
+        heatmap_vmax=heatmap_vmax,
+        heatmap_linecolor=heatmap_linecolor,
+        heatmap_linewidths=heatmap_linewidths,
         heatmap_cbar_kws=dict(
             use_gridspec=False,
             location="right",
@@ -204,6 +213,7 @@ def plot_r2_heatmap(
             pad=cbar_pad,
             drawedges=True,
         ),
+        dpi=dpi,
     )
     ax.set_xlabel(None)
     ax.set_xticklabels(ax.get_xticklabels(), fontsize=9)
