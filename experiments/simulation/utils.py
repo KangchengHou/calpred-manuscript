@@ -8,7 +8,7 @@ from typing import List
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
-from matplotlib.lines import Line2D
+
 
 def lighten_boxplot(ax):
 
@@ -66,21 +66,29 @@ def group_boxplot(df, val_col, group_list=None, axes=None, pos_offset=0.0, color
         vals = list(dict_val.values())
         means = [np.mean(_) for _ in vals]
         sems = [np.std(_) / np.sqrt(len(_)) for _ in vals]
+        props = {"linewidth" : 0.75}
         bplot = axes[group_i].boxplot(
             positions=np.arange(len(vals)) + 1 + pos_offset,
             x=vals,
             sym="",
             widths=0.15,
             patch_artist=True,
+            boxprops=props,
+            whiskerprops=props,
+            capprops=props,
+            medianprops=props
         )
         for patch in bplot["boxes"]:
             patch.set_facecolor(color)
+            
+        for patch in bplot['medians']:
+            patch.set_color('black')
+            
         axes[group_i].axhline(y=0.9, color="red", lw=0.8, ls="--")
         axes[group_i].set_xlabel(group)
         axes[group_i].set_xticks(np.arange(len(vals)) + 1)
         axes[group_i].set_xticklabels(x)
 
-    axes[0].set_ylabel("Coverage")
 
 
 def simulate_data(
@@ -167,8 +175,12 @@ def evaluate_metrics(
         adjust_cols = []
     df_cal, df_test = df_cal.copy(), df_test.copy()
 
+    # interval coverage
     dict_coverage = {}
+    # R2
     dict_r2 = {}
+    # interval length
+    dict_length = {}
 
     train_y = df_cal["y"]
     train_x = sm.add_constant(df_cal[["pred"]])
@@ -224,20 +236,36 @@ def evaluate_metrics(
         if group_col is None:
             dict_coverage["marginal"] = df_summary["coverage"]
             dict_r2["marginal"] = df_summary["r2"]
+            dict_length["marginal"] = df_summary["length"]
         else:
             for i in df_summary.index:
                 dict_coverage[f"{group_col}_{i}"] = df_summary["coverage"][i]
                 dict_r2[f"{group_col}_{i}"] = df_summary["r2"][i]
+                dict_length[f"{group_col}_{i}"] = df_summary["length"][i]
 
-    return pd.Series(dict_coverage), pd.Series(dict_r2), df_params
+    return (
+        pd.Series(dict_coverage),
+        pd.Series(dict_r2),
+        pd.Series(dict_length),
+        df_params,
+    )
 
 
-def multi_group_plot_wrapper(df_stats, groups, colors, labels, pos_offset=0.2, ylim=(0.81, 0.99), legend_bbox_to_anchor = (0.5, 0.96)):
+def multi_group_plot_wrapper(
+    df_stats,
+    groups,
+    colors,
+    labels,
+    ylim,
+    ylabel=None,
+    pos_offset=0.2,
+    legend_bbox_to_anchor=(0.5, 0.96),
+    val_col="coverage",
+    figsize=(7, 2.2)
+):
     n_group = len(groups)
     assert (len(colors) == n_group) and (len(labels) == n_group)
-    df_plot = df_stats[
-        (df_stats["adjust"].isin(groups))
-    ].copy()
+    df_plot = df_stats[(df_stats["adjust"].isin(groups))].copy()
     df_plot["group"] = df_plot["col"].apply(lambda x: x.split("_")[0])
     df_plot["group"] = df_plot["group"].replace(
         {"marginal": "Overall", "SEX": "Sex", "AGE": "Age"}
@@ -247,7 +275,7 @@ def multi_group_plot_wrapper(df_stats, groups, colors, labels, pos_offset=0.2, y
     )
 
     fig, axes = plt.subplots(
-        figsize=(7, 2.2),
+        figsize=figsize,
         ncols=4,
         sharey=True,
         gridspec_kw={"width_ratios": np.array([1, 5, 2, 5]) + 3},
@@ -257,7 +285,7 @@ def multi_group_plot_wrapper(df_stats, groups, colors, labels, pos_offset=0.2, y
     for i, group in enumerate(groups):
         group_boxplot(
             df_plot[df_plot["adjust"] == group],
-            val_col="coverage",
+            val_col=val_col,
             group_list=["Overall", "Age", "Sex", "PC1"],
             pos_offset=-pos_offset * (len(groups) - 1) / 2 + pos_offset * i,
             axes=axes,
@@ -269,7 +297,7 @@ def multi_group_plot_wrapper(df_stats, groups, colors, labels, pos_offset=0.2, y
         for color, label in zip(colors, labels)
     ]
     axes[0].set_ylim(ylim)
-
+    axes[0].set_ylabel(ylabel)
     # Create the figure
     fig.legend(
         handles=legend_elements,
