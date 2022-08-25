@@ -1,9 +1,38 @@
+import matplotlib.colors as mc
+import colorsys
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.transforms as mtrans
 from typing import Dict, List
+from matplotlib.patches import Patch
+
+
+def lighten_boxplot(ax):
+
+    # https://stackoverflow.com/questions/55656683/change-seaborn-boxplot-line-rainbow-color
+    def lighten_color(color, amount=0.5):
+        # --------------------- SOURCE: @IanHincks ---------------------
+        try:
+            c = mc.cnames[color]
+        except:
+            c = color
+        c = colorsys.rgb_to_hls(*mc.to_rgb(c))
+        return colorsys.hls_to_rgb(c[0], 1 - amount * (1 - c[1]), c[2])
+
+    for i, artist in enumerate(ax.artists):
+        # Set the linecolor on the artist to the facecolor, and set the facecolor to None
+        col = lighten_color(artist.get_facecolor(), 1.2)
+        artist.set_edgecolor(col)
+
+        # Each box has 6 associated Line2D objects (to make the whiskers, fliers, etc.)
+        # Loop over them here, and use the same colour as above
+        for j in range(i * 6, i * 6 + 6):
+            line = ax.lines[j]
+            line.set_color(col)
+            line.set_mfc(col)
+            line.set_mec(col)
 
 
 def plot_calibration(
@@ -237,6 +266,203 @@ def plot_r2_heatmap(
         spine.set_visible(True)
 
     return fig, ax
+
+
+def _group_plot(
+    df,
+    val_col,
+    groups,
+    axes,
+    pos_offset,
+    color,
+    plot_type="box",
+):
+    """Box / line plots for each group (in each panel)
+    df should contain "group", "subgroup"
+    each group corresponds to a panel, each subgroup corresponds to
+    different x within the panel
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        dataframe containing 'group', 'subgroup', val_col
+    val_col : str
+        column containing the values
+    """
+    assert plot_type in ["box", "line"]
+
+    for group_i, group in enumerate(groups):
+        df_group = df[df.group == group]
+        dict_val = {
+            group: df_tmp[val_col].values
+            for group, df_tmp in df_group.groupby("subgroup")
+        }
+        x = list(dict_val.keys())
+        vals = list(dict_val.values())
+        means = [np.mean(_) for _ in vals]
+        sems = [np.std(_) / np.sqrt(len(_)) for _ in vals]
+        if plot_type == "box":
+            props = {"linewidth": 0.75}
+            bplot = axes[group_i].boxplot(
+                positions=np.arange(len(vals)) + pos_offset,
+                x=vals,
+                sym="",
+                widths=0.15,
+                patch_artist=True,
+                boxprops=props,
+                whiskerprops=props,
+                capprops=props,
+                medianprops=props,
+            )
+            for patch in bplot["boxes"]:
+                patch.set_facecolor(color)
+            for patch in bplot["medians"]:
+                patch.set_color("black")
+
+        elif plot_type == "line":
+            axes[group_i].errorbar(
+                x=np.arange(len(vals)) + 1 + pos_offset,
+                y=means,
+                yerr=sems,
+                fmt=".--",
+                ms=4,
+                mew=1,
+                linewidth=1,
+                color=color,
+            )
+        else:
+            raise ValueError("plot_type must be 'box' or 'line'")
+
+        axes[group_i].set_xlabel(group)
+        axes[group_i].set_xticks(np.arange(len(vals)))
+        axes[group_i].set_xticklabels(x)
+
+
+def plot_group_r2(df: pd.DataFrame, figsize=(7, 1.5), groups=None, width_ratios=None):
+    """Plot R2 by groups
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        dataframe containing 'group', 'subgroup', 'r2'
+    figsize : tuple, optional
+        figure size, by default (7, 1.5)
+    """
+
+    if groups is None:
+        groups = df["group"].unique()
+    if width_ratios is None:
+        width_ratios = (
+            np.array([len(df[df["group"] == g]["subgroup"].unique()) for g in groups])
+            + 3
+        )
+
+    fig, axes = plt.subplots(
+        figsize=figsize,
+        dpi=150,
+        ncols=len(width_ratios),
+        sharey=True,
+        gridspec_kw={"width_ratios": width_ratios},
+    )
+
+    for i, group in enumerate(groups):
+        r2 = df[df["group"] == group].groupby("subgroup").mean()["r2"].values
+        r2_se = df[df["group"] == group].groupby("subgroup").sem()["r2"].values
+
+        axes[i].bar(
+            x=np.arange(len(r2)),
+            height=r2,
+            yerr=r2_se * 2,
+            edgecolor="k",
+            linewidth=1,
+            alpha=0.6,
+            color="#FFA500",
+            width=0.6,
+        )
+        axes[i].set_xlim(-1, len(r2))
+        axes[i].set_xticks(np.arange(len(r2)))
+        axes[i].set_xlabel(group)
+    axes[0].set_ylabel("$R^2 (y, \widehat{y})$", fontsize=12)
+    return fig, axes
+
+
+def plot_group_predint(
+    df: pd.DataFrame,
+    figsize=(7, 1.8),
+    methods: List = None,
+    method_colors: Dict = None,
+    groups=None,
+    pos_offset: float = 0.2,
+    legend_bbox_to_anchor=(0.5, 0.96),
+    width_ratios=None,
+):
+    """Plot the prediction interval summary
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        df contains: 'method', 'group', 'subgroup', 'coverage', 'length'
+
+    pos_offset : float, optional
+        position offset
+    """
+    # plot 2 figures
+    if methods is None:
+        methods = df["method"].unique()
+    n_method = len(methods)
+    if method_colors is None:
+        palatte = sns.color_palette("Set1", n_method)
+        method_colors = {method: color for method, color in zip(methods, palatte)}
+
+    assert len(method_colors) == n_method
+    if groups is None:
+        groups = df["group"].unique()
+    if width_ratios is None:
+        width_ratios = (
+            np.array([len(df[df["group"] == g]["subgroup"].unique()) for g in groups])
+            + 3
+        )
+
+    fig_list = []
+    axes_list = []
+    for val_col in ["coverage", "length"]:
+        fig, axes = plt.subplots(
+            figsize=figsize,
+            ncols=len(width_ratios),
+            sharey=True,
+            gridspec_kw={"width_ratios": width_ratios},
+            dpi=150,
+        )
+
+        for i, method in enumerate(methods):
+            _group_plot(
+                df[df["method"] == method],
+                val_col=val_col,
+                groups=groups,
+                pos_offset=-pos_offset * (len(methods) - 1) / 2 + pos_offset * i,
+                axes=axes,
+                color=method_colors[method],
+            )
+        legend_elements = [
+            Patch(facecolor=method_colors[method], edgecolor="k", label=method)
+            for method in methods
+        ]
+        fig.legend(
+            handles=legend_elements,
+            loc="center",
+            ncol=len(methods),
+            bbox_to_anchor=legend_bbox_to_anchor,
+            fontsize=8,
+            frameon=False,
+        )
+        if val_col == "coverage":
+            axes[0].set_ylabel("Interval coverage")
+        elif val_col == "length":
+            axes[0].set_ylabel("Interval length")
+
+        fig_list.append(fig)
+        axes_list.append(axes)
+    return fig_list[0], axes_list[0], fig_list[1], axes_list[1]
 
 
 def plot_r2_cov(
