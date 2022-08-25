@@ -308,7 +308,7 @@ def _group_plot(
                 positions=np.arange(len(vals)) + pos_offset,
                 x=vals,
                 sym="",
-                widths=0.15,
+                widths=0.2,
                 patch_artist=True,
                 boxprops=props,
                 whiskerprops=props,
@@ -339,7 +339,14 @@ def _group_plot(
         axes[group_i].set_xticklabels(x)
 
 
-def plot_group_r2(df: pd.DataFrame, figsize=(7, 1.5), groups=None, width_ratios=None):
+def plot_group_r2(
+    df: pd.DataFrame,
+    figsize=(7, 1.5),
+    groups=None,
+    width_ratios=None,
+    plot_type="box",
+    color="lightgray",
+):
     """Plot R2 by groups
 
     Parameters
@@ -355,7 +362,7 @@ def plot_group_r2(df: pd.DataFrame, figsize=(7, 1.5), groups=None, width_ratios=
     if width_ratios is None:
         width_ratios = (
             np.array([len(df[df["group"] == g]["subgroup"].unique()) for g in groups])
-            + 3
+            + 2
         )
 
     fig, axes = plt.subplots(
@@ -367,19 +374,43 @@ def plot_group_r2(df: pd.DataFrame, figsize=(7, 1.5), groups=None, width_ratios=
     )
 
     for i, group in enumerate(groups):
-        r2 = df[df["group"] == group].groupby("subgroup").mean()["r2"].values
-        r2_se = df[df["group"] == group].groupby("subgroup").sem()["r2"].values
 
-        axes[i].bar(
-            x=np.arange(len(r2)),
-            height=r2,
-            yerr=r2_se * 2,
-            edgecolor="k",
-            linewidth=1,
-            alpha=0.6,
-            color="#FFA500",
-            width=0.6,
-        )
+        if plot_type == "bar":
+            r2 = df[df["group"] == group].groupby("subgroup").mean()["r2"].values
+            r2_se = df[df["group"] == group].groupby("subgroup").sem()["r2"].values
+            axes[i].bar(
+                x=np.arange(len(r2)),
+                height=r2,
+                yerr=r2_se * 2,
+                edgecolor="k",
+                linewidth=1,
+                alpha=0.6,
+                color=color,
+                width=0.6,
+            )
+        elif plot_type == "box":
+            df_group = df[df.group == group]
+            r2 = [
+                df_group[df_group["subgroup"] == sg]["r2"].values
+                for sg in df_group["subgroup"].unique()
+            ]
+            props = {"linewidth": 0.75}
+            bplot = axes[i].boxplot(
+                positions=np.arange(len(r2)),
+                x=r2,
+                sym="",
+                widths=0.23,
+                patch_artist=True,
+                boxprops=props,
+                whiskerprops=props,
+                capprops=props,
+                medianprops=props,
+            )
+            for patch in bplot["boxes"]:
+                patch.set_facecolor(color)
+            for patch in bplot["medians"]:
+                patch.set_color("black")
+
         axes[i].set_xlim(-1, len(r2))
         axes[i].set_xticks(np.arange(len(r2)))
         axes[i].set_xlabel(group)
@@ -393,7 +424,7 @@ def plot_group_predint(
     methods: List = None,
     method_colors: Dict = None,
     groups=None,
-    pos_offset: float = 0.2,
+    pos_offset: float = 0.3,
     legend_bbox_to_anchor=(0.5, 0.96),
     width_ratios=None,
 ):
@@ -421,7 +452,7 @@ def plot_group_predint(
     if width_ratios is None:
         width_ratios = (
             np.array([len(df[df["group"] == g]["subgroup"].unique()) for g in groups])
-            + 3
+            + 2
         )
 
     fig_list = []
@@ -453,17 +484,17 @@ def plot_group_predint(
             loc="center",
             ncol=len(methods),
             bbox_to_anchor=legend_bbox_to_anchor,
-            fontsize=8,
+            fontsize=10,
             frameon=False,
         )
         if val_col == "coverage":
-            axes[0].set_ylabel("Coverage")
+            axes[0].set_ylabel("Coverage of \nPrediction interval", fontsize=11)
             axes[0].yaxis.set_major_formatter(
                 FuncFormatter(lambda y, _: "{:.0%}".format(y))
             )
 
         elif val_col == "length":
-            axes[0].set_ylabel("Length")
+            axes[0].set_ylabel("Length of \nPrediction interval", fontsize=11)
 
         fig_list.append(fig)
         axes_list.append(axes)
