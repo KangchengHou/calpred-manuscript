@@ -36,8 +36,16 @@ def lighten_boxplot(ax):
             line.set_mec(col)
 
 
-def group_boxplot(df, val_col, group_list=None, axes=None, pos_offset=0.0, color="C0"):
-    """Box plots for each group (in each panel)
+def group_plot(
+    df,
+    val_col,
+    group_list=None,
+    axes=None,
+    pos_offset=0.0,
+    color="C0",
+    plot_type="box",
+):
+    """Box / line plots for each group (in each panel)
     df should contain "group", "subgroup"
     each group corresponds to a panel, each subgroup corresponds to
     different x within the panel
@@ -49,9 +57,10 @@ def group_boxplot(df, val_col, group_list=None, axes=None, pos_offset=0.0, color
     val_col : str
         column containing the values
     """
-
     if group_list is None:
         group_list = df["group"].unique()
+    assert plot_type in ["box", "line"]
+
     group_size = np.array(
         [len(df[df.group == group].subgroup.unique()) for group in group_list]
     )
@@ -66,29 +75,41 @@ def group_boxplot(df, val_col, group_list=None, axes=None, pos_offset=0.0, color
         vals = list(dict_val.values())
         means = [np.mean(_) for _ in vals]
         sems = [np.std(_) / np.sqrt(len(_)) for _ in vals]
-        props = {"linewidth" : 0.75}
-        bplot = axes[group_i].boxplot(
-            positions=np.arange(len(vals)) + 1 + pos_offset,
-            x=vals,
-            sym="",
-            widths=0.15,
-            patch_artist=True,
-            boxprops=props,
-            whiskerprops=props,
-            capprops=props,
-            medianprops=props
-        )
-        for patch in bplot["boxes"]:
-            patch.set_facecolor(color)
-            
-        for patch in bplot['medians']:
-            patch.set_color('black')
-            
-        axes[group_i].axhline(y=0.9, color="red", lw=0.8, ls="--")
+        if plot_type == "box":
+            props = {"linewidth": 0.75}
+            bplot = axes[group_i].boxplot(
+                positions=np.arange(len(vals)) + 1 + pos_offset,
+                x=vals,
+                sym="",
+                widths=0.15,
+                patch_artist=True,
+                boxprops=props,
+                whiskerprops=props,
+                capprops=props,
+                medianprops=props,
+            )
+            for patch in bplot["boxes"]:
+                patch.set_facecolor(color)
+
+            for patch in bplot["medians"]:
+                patch.set_color("black")
+        elif plot_type == "line":
+            axes[group_i].errorbar(
+                x=np.arange(len(vals)) + 1 + pos_offset,
+                y=means,
+                yerr=sems,
+                fmt=".--",
+                ms=4,
+                mew=1,
+                linewidth=1,
+                color=color,
+            )
+        else:
+            raise ValueError("plot_type must be 'box' or 'line'")
+        # axes[group_i].axhline(y=0.9, color="red", lw=0.8, ls="--")
         axes[group_i].set_xlabel(group)
         axes[group_i].set_xticks(np.arange(len(vals)) + 1)
         axes[group_i].set_xticklabels(x)
-
 
 
 def simulate_data(
@@ -253,48 +274,49 @@ def evaluate_metrics(
 
 def multi_group_plot_wrapper(
     df_stats,
-    groups,
-    colors,
+    methods,
+    method_colors,
     labels,
     ylim,
+    groups=["Overall", "PC1", "Age", "Sex"],
     ylabel=None,
     pos_offset=0.2,
     legend_bbox_to_anchor=(0.5, 0.96),
     val_col="coverage",
-    figsize=(7, 2.2)
+    figsize=(7, 2.2),
 ):
-    n_group = len(groups)
-    assert (len(colors) == n_group) and (len(labels) == n_group)
-    df_plot = df_stats[(df_stats["adjust"].isin(groups))].copy()
-    df_plot["group"] = df_plot["col"].apply(lambda x: x.split("_")[0])
-    df_plot["group"] = df_plot["group"].replace(
-        {"marginal": "Overall", "SEX": "Sex", "AGE": "Age"}
-    )
-    df_plot["subgroup"] = df_plot["col"].apply(
-        lambda x: x.rsplit("_", 1)[1] if "_" in x else ""
-    )
+    n_method = len(methods)
+    assert (len(method_colors) == n_method) and (len(labels) == n_method)
+    df_plot = df_stats[(df_stats["method"].isin(methods))].copy()
+
+    if groups == ["Overall", "PC1", "Age", "Sex"]:
+        width_ratios = np.array([1, 5, 5, 2]) + 3
+    elif groups == ["PC1", "Age", "Sex"]:
+        width_ratios = np.array([5, 5, 2]) + 3
+    else:
+        raise NotImplementedError
 
     fig, axes = plt.subplots(
         figsize=figsize,
-        ncols=4,
+        ncols=len(width_ratios),
         sharey=True,
-        gridspec_kw={"width_ratios": np.array([1, 5, 2, 5]) + 3},
+        gridspec_kw={"width_ratios": width_ratios},
         dpi=150,
     )
 
-    for i, group in enumerate(groups):
-        group_boxplot(
-            df_plot[df_plot["adjust"] == group],
+    for i, method in enumerate(methods):
+        group_plot(
+            df_plot[df_plot["method"] == method],
             val_col=val_col,
-            group_list=["Overall", "Age", "Sex", "PC1"],
-            pos_offset=-pos_offset * (len(groups) - 1) / 2 + pos_offset * i,
+            group_list=groups,
+            pos_offset=-pos_offset * (len(methods) - 1) / 2 + pos_offset * i,
             axes=axes,
-            color=colors[i],
+            color=method_colors[i],
         )
 
     legend_elements = [
         Patch(facecolor=color, edgecolor="k", label=label)
-        for color, label in zip(colors, labels)
+        for color, label in zip(method_colors, labels)
     ]
     axes[0].set_ylim(ylim)
     axes[0].set_ylabel(ylabel)
@@ -302,7 +324,7 @@ def multi_group_plot_wrapper(
     fig.legend(
         handles=legend_elements,
         loc="center",
-        ncol=len(groups),
+        ncol=len(methods),
         bbox_to_anchor=legend_bbox_to_anchor,
         fontsize=8,
         frameon=False,
