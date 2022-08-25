@@ -7,6 +7,7 @@ import seaborn as sns
 import matplotlib.transforms as mtrans
 from typing import Dict, List
 from matplotlib.patches import Patch
+from matplotlib.ticker import FuncFormatter
 
 
 def lighten_boxplot(ax):
@@ -456,9 +457,13 @@ def plot_group_predint(
             frameon=False,
         )
         if val_col == "coverage":
-            axes[0].set_ylabel("Interval coverage")
+            axes[0].set_ylabel("Coverage")
+            axes[0].yaxis.set_major_formatter(
+                FuncFormatter(lambda y, _: "{:.0%}".format(y))
+            )
+
         elif val_col == "length":
-            axes[0].set_ylabel("Interval length")
+            axes[0].set_ylabel("Length")
 
         fig_list.append(fig)
         axes_list.append(axes)
