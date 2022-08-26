@@ -362,7 +362,7 @@ def plot_group_r2(
     if width_ratios is None:
         width_ratios = (
             np.array([len(df[df["group"] == g]["subgroup"].unique()) for g in groups])
-            + 2
+            + 1
         )
 
     fig, axes = plt.subplots(
@@ -411,10 +411,12 @@ def plot_group_r2(
             for patch in bplot["medians"]:
                 patch.set_color("black")
 
-        axes[i].set_xlim(-1, len(r2))
+        axes[i].set_xlim(-0.5, len(r2) - 0.5)
         axes[i].set_xticks(np.arange(len(r2)))
         axes[i].set_xlabel(group)
     axes[0].set_ylabel("$R^2 (y, \widehat{y})$", fontsize=12)
+    fig.subplots_adjust(wspace=0.1)
+
     return fig, axes
 
 
@@ -452,7 +454,7 @@ def plot_group_predint(
     if width_ratios is None:
         width_ratios = (
             np.array([len(df[df["group"] == g]["subgroup"].unique()) for g in groups])
-            + 2
+            + 1
         )
 
     fig_list = []
@@ -495,7 +497,7 @@ def plot_group_predint(
 
         elif val_col == "length":
             axes[0].set_ylabel("Length of \nPrediction interval", fontsize=11)
-
+        fig.subplots_adjust(wspace=0.1)
         fig_list.append(fig)
         axes_list.append(axes)
     return fig_list[0], axes_list[0], fig_list[1], axes_list[1]
