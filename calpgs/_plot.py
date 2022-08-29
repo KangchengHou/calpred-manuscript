@@ -1,5 +1,4 @@
 import matplotlib.colors as mc
-import colorsys
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -10,30 +9,34 @@ from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter
 
 
-def lighten_boxplot(ax):
+def lighten_color(color, amount=1.25):
+    """
+    Lightens the given color by multiplying (1-luminosity) by the given amount.
+    Input can be matplotlib color string, hex string, or RGB tuple.
 
-    # https://stackoverflow.com/questions/55656683/change-seaborn-boxplot-line-rainbow-color
-    def lighten_color(color, amount=0.5):
-        # --------------------- SOURCE: @IanHincks ---------------------
-        try:
-            c = mc.cnames[color]
-        except:
-            c = color
-        c = colorsys.rgb_to_hls(*mc.to_rgb(c))
-        return colorsys.hls_to_rgb(c[0], 1 - amount * (1 - c[1]), c[2])
+    Examples:
+    >> lighten_color('g', 0.3)
+    >> lighten_color('#F034A3', 0.6)
+    >> lighten_color((.3,.55,.1), 0.5)
+    """
+    import matplotlib.colors as mc
+    import colorsys
 
-    for i, artist in enumerate(ax.artists):
-        # Set the linecolor on the artist to the facecolor, and set the facecolor to None
-        col = lighten_color(artist.get_facecolor(), 1.2)
-        artist.set_edgecolor(col)
+    try:
+        c = mc.cnames[color]
+    except:
+        c = color
+    c = colorsys.rgb_to_hls(*mc.to_rgb(c))
+    return colorsys.hls_to_rgb(c[0], 1 - amount * (1 - c[1]), c[2])
 
-        # Each box has 6 associated Line2D objects (to make the whiskers, fliers, etc.)
-        # Loop over them here, and use the same colour as above
-        for j in range(i * 6, i * 6 + 6):
-            line = ax.lines[j]
-            line.set_color(col)
-            line.set_mfc(col)
-            line.set_mec(col)
+
+def color_boxplot(bplot, color):
+
+    for i in range(len(bplot["boxes"])):
+        for obj in ["whiskers", "caps", "fliers", "medians"]:
+            for patch in bplot[obj]:
+                patch.set_color(color)
+        bplot["boxes"][i].set(color=color)
 
 
 def plot_calibration(
@@ -277,6 +280,8 @@ def _group_plot(
     pos_offset,
     color,
     plot_type="box",
+    edge_alpha=None,
+    widths=0.2,
 ):
     """Box / line plots for each group (in each panel)
     df should contain "group", "subgroup"
@@ -303,22 +308,26 @@ def _group_plot(
         means = [np.mean(_) for _ in vals]
         sems = [np.std(_) / np.sqrt(len(_)) for _ in vals]
         if plot_type == "box":
-            props = {"linewidth": 0.75}
+            props = {"linewidth": 0.65}
             bplot = axes[group_i].boxplot(
                 positions=np.arange(len(vals)) + pos_offset,
                 x=vals,
                 sym="",
-                widths=0.2,
+                widths=widths,
                 patch_artist=True,
                 boxprops=props,
                 whiskerprops=props,
                 capprops=props,
                 medianprops=props,
             )
+            if edge_alpha is not None:
+                color_boxplot(bplot, lighten_color(color, edge_alpha))
+            else:
+                for patch in bplot["medians"]:
+                    patch.set_color("black")
+
             for patch in bplot["boxes"]:
                 patch.set_facecolor(color)
-            for patch in bplot["medians"]:
-                patch.set_color("black")
 
         elif plot_type == "line":
             axes[group_i].errorbar(
@@ -394,7 +403,7 @@ def plot_group_r2(
                 df_group[df_group["subgroup"] == sg]["r2"].values
                 for sg in df_group["subgroup"].unique()
             ]
-            props = {"linewidth": 0.75}
+            props = {"linewidth": 0.65}
             bplot = axes[i].boxplot(
                 positions=np.arange(len(r2)),
                 x=r2,
@@ -427,7 +436,9 @@ def plot_group_predint(
     method_colors: Dict = None,
     groups=None,
     pos_offset: float = 0.3,
+    widths=0.2,
     legend_bbox_to_anchor=(0.5, 0.96),
+    legend_fontsize=10,
     width_ratios=None,
 ):
     """Plot the prediction interval summary
@@ -475,10 +486,15 @@ def plot_group_predint(
                 groups=groups,
                 pos_offset=-pos_offset * (len(methods) - 1) / 2 + pos_offset * i,
                 axes=axes,
+                widths=widths,
                 color=method_colors[method],
             )
         legend_elements = [
-            Patch(facecolor=method_colors[method], edgecolor="k", label=method)
+            Patch(
+                facecolor=method_colors[method],
+                edgecolor="k",
+                label=method,
+            )
             for method in methods
         ]
         fig.legend(
@@ -486,7 +502,7 @@ def plot_group_predint(
             loc="center",
             ncol=len(methods),
             bbox_to_anchor=legend_bbox_to_anchor,
-            fontsize=10,
+            fontsize=legend_fontsize,
             frameon=False,
         )
         if val_col == "coverage":
