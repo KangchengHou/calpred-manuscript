@@ -3,3 +3,4 @@ from ._evaluate import *
 from ._simulate import *
 from ._method import *
 from ._plot import *
+from ._wrapper import *
