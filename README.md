@@ -1,12 +1,17 @@
-# CalPGS (Calibrated PGS)
+# CalPred (Calibrated Prediction Intervals for Polygenic Scores Across Diverse Contexts)
 
-To install the package,
+This repository contains the source code an initial version of CalPred and analysis script used in the manuscript. For a more easy-to-use software package, refer to [CalPred github repo](https://github.com/KangchengHou/calpred).
+
+The following are useful for those interested in exploring this repository.
+
+## Installation
+To install the initial version package contained in this manuscript,
 ```bash
 git clone git@github.com:KangchengHou/calpgs.git && cd calpgs
 pip install -e .
 ```
 
-## CLI for `CalPGS`
+## CLI
 Calculate R2 differences between PGS and phenotype across covariate groups.
 ```bash
 toy=tests/test-data/toy.tsv
