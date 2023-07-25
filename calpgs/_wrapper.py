@@ -91,6 +91,7 @@ def quantify_r2(
     pred_col: str,
     test_cols: List[str],
     out_prefix: str,
+    n_subgroup: int = 5,
     predstd_col: str = None,
     n_bootstrap=None,
 ):
@@ -127,6 +128,7 @@ def quantify_r2(
         f"--pred {pred_col}",
         f"--group {','.join(test_cols)}",
         "--cor spearman",
+        f"--n-subgroup {n_subgroup}",
         f"--out {out_prefix}",
     ]
     if predstd_col is not None:
